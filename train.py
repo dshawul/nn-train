@@ -2,10 +2,12 @@ import sys
 import os
 import time
 import chess
+import chess.pgn
 import resnet
 import numpy as np
 
 from keras.models import load_model
+from keras import optimizers
 
 ############# Workaround for multi-gpu training and model saving bug #################
 from keras.layers import Lambda, concatenate
@@ -139,6 +141,7 @@ class NNet():
     def __init__(self):
         self.batch_size = 4096
         self.epochs = 20
+        self.lr = 0.001
         self.model = []
         self.model.append( resnet.ResnetBuilder.build_resnet_1((8, 8, CHANNELS), (NPARMS,)) )
         self.model.append( resnet.ResnetBuilder.build_resnet_3((8, 8, CHANNELS), (NPARMS,)) )
@@ -146,10 +149,11 @@ class NNet():
         # self.model.append( resnet.ResnetBuilder.build_resnet_12((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_20((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_40((8, 8, CHANNELS), (NPARMS,)) )
+        self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
             self.model[i] = multi_gpu_model(self.model[i], gpus=4)
             self.model[i].compile(loss='mean_squared_error',
-                  optimizer='adam',
+                  optimizer=self.opt,
                   metrics=['accuracy'])
         self.b = chess.Board()
     
@@ -208,28 +212,31 @@ class NNet():
         self.model[0] = load_model(filepath  + "-model-" + str(0), {'tf': tf})
 
 
-def train_pgn(myNet,myPgn,start=0):
+def train_pgn(myNet,myPgn,start=1):
+
     with open(myPgn) as file:
         examples = []
         count = 0
+        print "Collecting data"
+        
         while True:
 
             #read game
-            game = chess.pgn.read_game(file)
             count = count + 1
             if count < start:
+                game = chess.pgn.scan_headers(file)
                 continue
+            else:
+                game = chess.pgn.read_game(file)
 
             #train network
             if (not game) or (count % PGN_CHUNK_SIZE == 0):
                 chunk = (count + PGN_CHUNK_SIZE - 1) / PGN_CHUNK_SIZE
-                print "Training on chunk ", chunk, " ending at game ", count
+                print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
                 myNet.train(examples)
                 myNet.save_checkpoint("nets","ID-" + str(chunk))
                 examples = []
-
-            if not game:
-                break
+                print "Collecting data" 
 
             #break out
             if not game:
@@ -245,16 +252,20 @@ def train_pgn(myNet,myPgn,start=0):
                 result = 0.5
 
             #iterate through the moves
-            n = game
-            while not n.is_end():
-                b = n.board()
+            b = game.board()
+            examples.append([b.fen(),result])
+            for move in game.main_line():
+                b.push(move)
                 examples.append([b.fen(),result])
-                n = n.variations[0]
 
-def train_epd(myNet,myEpd,start=0):
-    examples = []
-    count = 0
+
+def train_epd(myNet,myEpd,start=1):
+
     with open(myEpd) as file:
+        examples = []
+        count = 0
+        print "Collecting data"
+
         while True:
 
             #read fen
@@ -270,7 +281,9 @@ def train_epd(myNet,myEpd,start=0):
                 myNet.train(examples)
                 myNet.save_checkpoint("nets","ID-" + str(chunk))
                 examples = []
+                print "Collecting data" 
 
+            #break out
             if not line:
                 break
 
@@ -324,16 +337,19 @@ def play(myNet):
 
 def main(argv):
     myNet = NNet()
-    EPD_PATH = "../tune/merged.epd"
+    # EPD_PATH = "../tune/merged.epd"
+    PGN_PATH = "../../ccrl.pgn"
 
     #start training from specific chunk
     chunk = 0
-    start = 0
+    start = 1
     if chunk > 0:
-        start = chunk * EPD_CHUNK_SIZE
+        # start = chunk * EPD_CHUNK_SIZE + 1
+        start = chunk * PGN_CHUNK_SIZE + 1
         myNet.load_checkpoint("nets","ID-" + str(chunk))
 
-    train_epd(myNet, EPD_PATH, start)
+    # train_epd(myNet, EPD_PATH, start)
+    train_pgn(myNet, PGN_PATH, start)
 
     # play(myNet)
 

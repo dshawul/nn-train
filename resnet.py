@@ -162,7 +162,7 @@ class ResnetBuilder(object):
         x = _conv_bn_relu(filters=1, kernel_size=(1, 1), strides=(1, 1))(x)
         x = Flatten()(x)
         x = concatenate([x, aux_input])
-        x = Dense(64, activation='tanh')(x)
+        x = Dense(256, activation='tanh')(x)
         output = Dense(1, activation='sigmoid')(x)
 
         # model
