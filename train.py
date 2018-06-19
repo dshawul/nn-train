@@ -258,8 +258,11 @@ def train_pgn(myNet,myPgn,start=1):
             b = game.board()
             examples.append([b.fen(),result])
             for move in game.main_line():
-                b.push(move)
-                examples.append([b.fen(),result])
+                if not (b.is_capture(move) or move.promotion):
+                    b.push(move)
+                    examples.append([b.fen(),result])
+                else:
+                    b.push(move)
 
 
 def train_epd(myNet,myEpd,start=1):
@@ -345,7 +348,7 @@ def main(argv):
     parser.add_argument('--pgn','-p', dest='pgn', required=False, help='Path to PGN file for training.')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
-    parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=20, help='Training epochs.')
+    parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
     parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
     args = parser.parse_args()
