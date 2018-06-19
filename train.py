@@ -5,6 +5,7 @@ import chess
 import chess.pgn
 import resnet
 import numpy as np
+import argparse
 
 from keras.models import load_model
 from keras import optimizers
@@ -138,10 +139,11 @@ def fill_planes(iplanes, iparams, b):
     iparams[4] = v
 
 class NNet():
-    def __init__(self):
-        self.batch_size = 4096
-        self.epochs = 20
-        self.lr = 0.001
+    def __init__(self,args):
+        self.batch_size = args.batch_size
+        self.epochs = args.epochs
+        self.lr = args.lr
+
         self.model = []
         self.model.append( resnet.ResnetBuilder.build_resnet_1((8, 8, CHANNELS), (NPARMS,)) )
         self.model.append( resnet.ResnetBuilder.build_resnet_3((8, 8, CHANNELS), (NPARMS,)) )
@@ -149,6 +151,7 @@ class NNet():
         # self.model.append( resnet.ResnetBuilder.build_resnet_12((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_20((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_40((8, 8, CHANNELS), (NPARMS,)) )
+
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
             self.model[i] = multi_gpu_model(self.model[i], gpus=4)
@@ -335,23 +338,33 @@ def play(myNet):
         b.push(bestm)
         print "My move: ", bestm, "Score ", 100 * beste
 
-def main(argv):
-    myNet = NNet()
-    # EPD_PATH = "../tune/merged.epd"
-    PGN_PATH = "../../ccrl.pgn"
 
-    #start training from specific chunk
-    chunk = 0
-    start = 1
+def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
+    parser.add_argument('--pgn','-p', dest='pgn', required=False, help='Path to PGN file for training.')
+    parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
+    parser.add_argument('--batch-size',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
+    parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=20, help='Training epochs.')
+    parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
+    parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
+    args = parser.parse_args()
+
+    myNet = NNet(args)
+
+    chunk = args.id
     if chunk > 0:
-        # start = chunk * EPD_CHUNK_SIZE + 1
-        start = chunk * PGN_CHUNK_SIZE + 1
         myNet.load_checkpoint("nets","ID-" + str(chunk))
 
-    # train_epd(myNet, EPD_PATH, start)
-    train_pgn(myNet, PGN_PATH, start)
-
-    # play(myNet)
+    if args.pgn != None:
+        start = chunk * PGN_CHUNK_SIZE + 1
+        train_pgn(myNet, args.pgn, start)
+    elif args.epd != None:
+        start = chunk * EPD_CHUNK_SIZE + 1
+        train_epd(myNet, args.epd, start)
+    else:
+        play(myNet)
 
 if __name__ == "__main__":
+
     main(sys.argv[1:])
