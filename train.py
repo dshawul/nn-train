@@ -4,78 +4,15 @@ import time
 import chess
 import chess.pgn
 import resnet
+import multigpu
 import numpy as np
 import argparse
 
 from keras.models import load_model
 from keras import optimizers
-
-############# Workaround for multi-gpu training and model saving bug #################
-from keras.layers import Lambda, concatenate
-from keras import Model
 import tensorflow as tf
 
-def multi_gpu_model(model, gpus):
-  if isinstance(gpus, (list, tuple)):
-    num_gpus = len(gpus)
-    target_gpu_ids = gpus
-  else:
-    num_gpus = gpus
-    target_gpu_ids = range(num_gpus)
-
-  def get_slice(data, i, parts):
-    shape = tf.shape(data)
-    batch_size = shape[:1]
-    input_shape = shape[1:]
-    step = batch_size // parts
-    if i == num_gpus - 1:
-      size = batch_size - step * i
-    else:
-      size = step
-    size = tf.concat([size, input_shape], axis=0)
-    stride = tf.concat([step, input_shape * 0], axis=0)
-    start = stride * i
-    return tf.slice(data, start, size)
-
-  all_outputs = []
-  for i in range(len(model.outputs)):
-    all_outputs.append([])
-
-  # Place a copy of the model on each GPU,
-  # each getting a slice of the inputs.
-  for i, gpu_id in enumerate(target_gpu_ids):
-    with tf.device('/gpu:%d' % gpu_id):
-      with tf.name_scope('replica_%d' % gpu_id):
-        inputs = []
-        # Retrieve a slice of the input.
-        for x in model.inputs:
-          input_shape = tuple(x.get_shape().as_list())[1:]
-          slice_i = Lambda(get_slice,
-                           output_shape=input_shape,
-                           arguments={'i': i,
-                                      'parts': num_gpus})(x)
-          inputs.append(slice_i)
-
-        # Apply model on slice
-        # (creating a model replica on the target device).
-        outputs = model(inputs)
-        if not isinstance(outputs, list):
-          outputs = [outputs]
-
-        # Save the outputs for merging back together later.
-        for o in range(len(outputs)):
-          all_outputs[o].append(outputs[o])
-
-  # Merge outputs on CPU.
-  with tf.device('/cpu:0'):
-    merged = []
-    for name, outputs in zip(model.output_names, all_outputs):
-      merged.append(concatenate(outputs,
-                                axis=0, name=name))
-    return Model(model.inputs, merged)
-#####################################
-
-CHANNELS = 12 #18
+CHANNELS = 12
 NPARMS = 5
 PGN_CHUNK_SIZE = 4096
 EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
@@ -154,7 +91,7 @@ class NNet():
 
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
-            self.model[i] = multi_gpu_model(self.model[i], gpus=4)
+            self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=4)
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
@@ -256,13 +193,10 @@ def train_pgn(myNet,myPgn,start=1):
 
             #iterate through the moves
             b = game.board()
-            examples.append([b.fen(),result])
             for move in game.main_line():
                 if not (b.is_capture(move) or move.promotion):
-                    b.push(move)
                     examples.append([b.fen(),result])
-                else:
-                    b.push(move)
+                b.push(move)
 
 
 def train_epd(myNet,myEpd,start=1):
@@ -355,7 +289,10 @@ def main(argv):
 
     myNet = NNet(args)
 
+    PGN_CHUNK_SIZE = args.chunk_size
+    EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
     chunk = args.id
+
     if chunk > 0:
         myNet.load_checkpoint("nets","ID-" + str(chunk))
 
@@ -363,11 +300,10 @@ def main(argv):
         start = chunk * PGN_CHUNK_SIZE + 1
         train_pgn(myNet, args.pgn, start)
     elif args.epd != None:
-        start = chunk * EPD_CHUNK_SIZE + 1
+        start = chunk * EPD_CHUNK_SIZE * 80 + 1
         train_epd(myNet, args.epd, start)
     else:
         play(myNet)
 
 if __name__ == "__main__":
-
     main(sys.argv[1:])
