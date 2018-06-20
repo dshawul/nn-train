@@ -191,12 +191,26 @@ def train_pgn(myNet,myPgn,start=1):
             else:
                 result = 0.5
 
-            #iterate through the moves
+            #iterate through the moves and add quiescent positions
             b = game.board()
+            cap_prom_check = False or b.is_check()
             for move in game.main_line():
-                if not (b.is_capture(move) or move.promotion):
-                    examples.append([b.fen(),result])
-                b.push(move)
+                if b.is_capture(move) or move.promotion:
+                    cap_prom_check = True
+                    b.push(move)
+                else:
+                    pfen = b.fen()
+                    b.push(move)
+                    ischeck = b.is_check()
+
+                    if not (cap_prom_check or ischeck):
+                        examples.append([pfen,result])
+                        
+                    if ischeck:
+                        cap_prom_check = True
+                    else:
+                        cap_prom_check = False
+                
 
 
 def train_epd(myNet,myEpd,start=1):
