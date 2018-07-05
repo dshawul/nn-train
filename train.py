@@ -153,7 +153,6 @@ class NNet():
 
 
 def train_pgn(myNet,myPgn,start=1):
-
     with open(myPgn) as file:
         examples = []
         count = 0
@@ -164,7 +163,13 @@ def train_pgn(myNet,myPgn,start=1):
             #read game
             count = count + 1
             if count < start:
-                game = chess.pgn.scan_headers(file)
+                for of in chess.pgn.scan_offsets(file):
+                    if count >= start:
+                        file.seek(of)
+                        game = chess.pgn.read_game(file)
+                        count = count + 1
+                        break;
+                    count = count + 1
                 continue
             else:
                 game = chess.pgn.read_game(file)
