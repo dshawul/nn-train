@@ -82,12 +82,13 @@ class NNet():
         self.lr = args.lr
 
         self.model = []
-        self.model.append( resnet.ResnetBuilder.build_resnet_1((8, 8, CHANNELS), (NPARMS,)) )
-        self.model.append( resnet.ResnetBuilder.build_resnet_3((8, 8, CHANNELS), (NPARMS,)) )
-        self.model.append( resnet.ResnetBuilder.build_resnet_6((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_12((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_20((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_40((8, 8, CHANNELS), (NPARMS,)) )
+        self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
+        self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
+        # self.model.append( resnet.ResnetBuilder.build_resnet_12x64((8, 8, CHANNELS), (NPARMS,)) )
+        # self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
+        # self.model.append( resnet.ResnetBuilder.build_resnet_24x128((8, 8, CHANNELS), (NPARMS,)) )
+        # self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
+        # self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
 
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
