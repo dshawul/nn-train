@@ -84,9 +84,7 @@ class NNet():
         self.model = []
         self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
         self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_12x64((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_24x128((8, 8, CHANNELS), (NPARMS,)) )
+        self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
         # self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
 

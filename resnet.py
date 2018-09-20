@@ -171,28 +171,20 @@ class ResnetBuilder(object):
 
     @staticmethod
     def build_resnet_2x32(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2], 32)
+        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1], 32)
 
     @staticmethod
     def build_resnet_6x64(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2], 64)
-
-    @staticmethod
-    def build_resnet_12x64(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2,2,2,2], 64)
-
+        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2], 64)
+        
     @staticmethod
     def build_resnet_12x128(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2,2,2,2], 128)
-
-    @staticmethod
-    def build_resnet_24x128(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2,2,2,2,2,2,2,2,2,2], 128)
+        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2], 128)
 
     @staticmethod
     def build_resnet_20x256(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2,2,2,2,2,2,2,2], 256)
+        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2,2,2,2,2], 256)
 
     @staticmethod
     def build_resnet_40x256(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], 256)
+        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], 256)
