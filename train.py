@@ -7,10 +7,14 @@ import resnet
 import multigpu
 import numpy as np
 import argparse
+import multiprocessing
+import time
+from joblib import Parallel, delayed
 
 from keras.models import load_model
 from keras import optimizers
 import tensorflow as tf
+
 
 CHANNELS = 12
 NPARMS = 5
@@ -75,6 +79,14 @@ def fill_planes(iplanes, iparams, b):
     v = chess.popcount(b.pawns & b.occupied_co[pl]) - chess.popcount(b.pawns & b.occupied_co[npl])
     iparams[4] = v
 
+def fill_one_example(i,p,oval,exams):
+    bb = chess.Board()
+    bb.set_epd(p)
+    if bb.turn == chess.BLACK:
+        bb = bb.mirror()
+        oval = 1 - oval
+    fill_planes(exams[0],exams[1],bb)
+
 class NNet():
     def __init__(self,args):
         self.batch_size = args.batch_size
@@ -90,28 +102,28 @@ class NNet():
 
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
-            self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=4)
+            self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=args.gpus)
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
         self.b = chess.Board()
-    
+        self.cores = args.cores
+
     def train(self,examples):
         epds, oval = list(zip(*examples))
         oval = list(oval)
         oval = np.asarray(oval)
 
-        exams = []
-        for i,p in enumerate(epds):
-            self.b.set_epd(p)
-            if self.b.turn == chess.BLACK:
-                self.b = self.b.mirror()
-                oval[i] = 1 - oval[i]
-            iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
-            iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
-            fill_planes(iplane,iparam,self.b)
-            exams.append([iplane,iparam])
-                
+        iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
+        iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
+        exams = [[iplane,iparam]] * len(epds)
+
+        print "Generating input planes using", self.cores, "cores"
+        start_t = time.time()
+        Parallel(n_jobs=self.cores)(delayed(fill_one_example)(i,p,oval[i],exams[i]) for i,p in enumerate(epds))
+        end_t = time.time()
+        print "Time", int(end_t - start_t), "sec"
+        
         ipls, ipars = list(zip(*exams))
         ipls = np.asarray(ipls)
         ipars = np.asarray(ipars)
@@ -151,10 +163,12 @@ class NNet():
         self.model[0] = load_model(filepath  + "-model-" + str(0), {'tf': tf})
 
 
-def train_pgn(myNet,myPgn,start=1):
-    with open(myPgn) as file:
-        examples = []
+def convert_pgn_to_epd(myPgn,myEpd,start=1):
+    
+    with open(myPgn,'r') as file, open(myEpd,'w') as efile:
         count = 0
+
+        start_t = time.time()
         print "Collecting data"
         
         while True:
@@ -176,10 +190,74 @@ def train_pgn(myNet,myPgn,start=1):
             #train network
             if (not game) or (count % PGN_CHUNK_SIZE == 0):
                 chunk = (count + PGN_CHUNK_SIZE - 1) / PGN_CHUNK_SIZE
+                end_t = time.time()
+                print "Time", int(end_t - start_t), "sec"
+
+                start_t = time.time()
+                print "Collecting data" 
+
+            #break out
+            if not game:
+                break
+
+            #parse result
+            sresult = game.headers["Result"]
+
+            #iterate through the moves and add quiescent positions
+            b = game.board()
+            cap_prom_check = False or b.is_check()
+            for move in game.main_line():
+                if b.is_capture(move) or move.promotion:
+                    cap_prom_check = True
+                    b.push(move)
+                else:
+                    pfen = b.fen()
+                    b.push(move)
+                    ischeck = b.is_check()
+
+                    if not (cap_prom_check or ischeck):
+                        efile.write(pfen + ' ' + sresult + '\n')
+                        
+                    if ischeck:
+                        cap_prom_check = True
+                    else:
+                        cap_prom_check = False
+
+def train_pgn(myNet,myPgn,start=1):
+    with open(myPgn) as file:
+        count = 0
+
+        examples = []
+        start_t = time.time()
+        print "Collecting data"
+        
+        while True:
+
+            #read game
+            count = count + 1
+            if count < start:
+                for of in chess.pgn.scan_offsets(file):
+                    if count >= start:
+                        file.seek(of)
+                        game = chess.pgn.read_game(file)
+                        count = count + 1
+                        break;
+                    count = count + 1
+                continue
+            else:
+                game = chess.pgn.read_game(file)
+
+            #train network
+            if (not game) or (count % PGN_CHUNK_SIZE == 0):
+                chunk = (count + PGN_CHUNK_SIZE - 1) / PGN_CHUNK_SIZE
+                end_t = time.time()
+                print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
                 myNet.train(examples)
                 myNet.save_checkpoint("nets","ID-" + str(chunk))
+
                 examples = []
+                start_t = time.time()
                 print "Collecting data" 
 
             #break out
@@ -216,12 +294,13 @@ def train_pgn(myNet,myPgn,start=1):
                         cap_prom_check = False
                 
 
-
 def train_epd(myNet,myEpd,start=1):
 
     with open(myEpd) as file:
-        examples = []
         count = 0
+
+        examples = []
+        start_t = time.time()
         print "Collecting data"
 
         while True:
@@ -235,10 +314,14 @@ def train_epd(myNet,myEpd,start=1):
             #train network
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
                 chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
+                end_t = time.time()
+                print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk , " ending at position ", count
                 myNet.train(examples)
                 myNet.save_checkpoint("nets","ID-" + str(chunk))
+
                 examples = []
+                start_t = time.time()
                 print "Collecting data" 
 
             #break out
@@ -303,25 +386,30 @@ def main(argv):
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
     parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
+    parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
+    parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=1, help='Number of gpus to use.')
     args = parser.parse_args()
 
-    myNet = NNet(args)
+    if args.pgn != None and args.epd != None:
+        convert_pgn_to_epd(args.pgn, args.epd)
+    else :
+        myNet = NNet(args)
 
-    PGN_CHUNK_SIZE = args.chunk_size
-    EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
-    chunk = args.id
+        PGN_CHUNK_SIZE = args.chunk_size
+        EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
+        chunk = args.id
 
-    if chunk > 0:
-        myNet.load_checkpoint("nets","ID-" + str(chunk))
+        if chunk > 0:
+            myNet.load_checkpoint("nets","ID-" + str(chunk))
 
-    if args.pgn != None:
-        start = chunk * PGN_CHUNK_SIZE + 1
-        train_pgn(myNet, args.pgn, start)
-    elif args.epd != None:
-        start = chunk * EPD_CHUNK_SIZE * 80 + 1
-        train_epd(myNet, args.epd, start)
-    else:
-        play(myNet)
+        if args.pgn != None:
+            start = chunk * PGN_CHUNK_SIZE + 1
+            train_pgn(myNet, args.pgn, start)
+        elif args.epd != None:
+            start = chunk * EPD_CHUNK_SIZE * 80 + 1
+            train_epd(myNet, args.epd, start)
+        else:
+            play(myNet)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
