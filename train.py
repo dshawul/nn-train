@@ -5,16 +5,16 @@ import chess
 import chess.pgn
 import resnet
 import multigpu
-import numpy as np
 import argparse
-import multiprocessing
 import time
+import gzip
+import numpy as np
+import multiprocessing
 from joblib import Parallel, delayed
 
 from keras.models import load_model
 from keras import optimizers
 import tensorflow as tf
-
 
 CHANNELS = 12
 NPARMS = 5
@@ -102,7 +102,8 @@ class NNet():
 
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
-            self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=args.gpus)
+            if args.gpus != 0:
+                self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=args.gpus)
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
@@ -163,9 +164,9 @@ class NNet():
         self.model[0] = load_model(filepath  + "-model-" + str(0), {'tf': tf})
 
 
-def convert_pgn_to_epd(myPgn,myEpd,start=1):
+def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
     
-    with open(myPgn,'r') as file, open(myEpd,'w') as efile:
+    with (open(myPgn) if not zipped else gzip.open(myPgn)) as file, open(myEpd,'w') as efile:
         count = 0
 
         start_t = time.time()
@@ -223,8 +224,9 @@ def convert_pgn_to_epd(myPgn,myEpd,start=1):
                     else:
                         cap_prom_check = False
 
-def train_pgn(myNet,myPgn,start=1):
-    with open(myPgn) as file:
+def train_pgn(myNet,myPgn,zipped=0,start=1):
+
+    with (open(myPgn) if not zipped else gzip.open(myPgn)) as file:
         count = 0
 
         examples = []
@@ -294,9 +296,9 @@ def train_pgn(myNet,myPgn,start=1):
                         cap_prom_check = False
                 
 
-def train_epd(myNet,myEpd,start=1):
+def train_epd(myNet,myEpd,zipped=0,start=1):
 
-    with open(myEpd) as file:
+    with (open(myEpd) if not zipped else gzip.open(myEpd)) as file:
         count = 0
 
         examples = []
@@ -387,11 +389,13 @@ def main(argv):
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
     parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
-    parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=1, help='Number of gpus to use.')
+    parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
+    parser.add_argument('--gzip',dest='gzip', required=False, action='store_true',help='Process zipped file.')
+
     args = parser.parse_args()
 
     if args.pgn != None and args.epd != None:
-        convert_pgn_to_epd(args.pgn, args.epd)
+        convert_pgn_to_epd(args.pgn, args.epd, args.gzip)
     else :
         myNet = NNet(args)
 
@@ -404,10 +408,10 @@ def main(argv):
 
         if args.pgn != None:
             start = chunk * PGN_CHUNK_SIZE + 1
-            train_pgn(myNet, args.pgn, start)
+            train_pgn(myNet, args.pgn, args.gzip, start)
         elif args.epd != None:
             start = chunk * EPD_CHUNK_SIZE * 80 + 1
-            train_epd(myNet, args.epd, start)
+            train_epd(myNet, args.epd, args.gzip, start)
         else:
             play(myNet)
 
