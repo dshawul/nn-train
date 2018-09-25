@@ -79,13 +79,23 @@ def fill_planes(iplanes, iparams, b):
     v = chess.popcount(b.pawns & b.occupied_co[pl]) - chess.popcount(b.pawns & b.occupied_co[npl])
     iparams[4] = v
 
-def fill_one_example(i,p,oval,exams):
-    bb = chess.Board()
-    bb.set_epd(p)
-    if bb.turn == chess.BLACK:
-        bb = bb.mirror()
-        oval = 1 - oval
-    fill_planes(exams[0],exams[1],bb)
+def fill_examples(examples):
+    epds, oval = list(zip(*examples))
+    oval = list(oval)
+
+    exams = []
+    for i,p in enumerate(epds):
+        bb = chess.Board()
+        bb.set_epd(p)
+        if bb.turn == chess.BLACK:
+            bb = bb.mirror()
+            oval[i] = 1 - oval[i]
+        iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
+        iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
+        fill_planes(iplane,iparam,bb)
+        exams.append([iplane,iparam])
+
+    return exams, oval
 
 class NNet():
     def __init__(self,args):
@@ -111,17 +121,20 @@ class NNet():
         self.cores = args.cores
 
     def train(self,examples):
-        epds, oval = list(zip(*examples))
-        oval = list(oval)
-        oval = np.asarray(oval)
-
-        iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
-        iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
-        exams = [[iplane,iparam]] * len(epds)
-
         print "Generating input planes using", self.cores, "cores"
         start_t = time.time()
-        Parallel(n_jobs=self.cores)(delayed(fill_one_example)(i,p,oval[i],exams[i]) for i,p in enumerate(epds))
+
+        nsz = len(examples)
+        nlen = nsz / self.cores
+        
+        res = Parallel(n_jobs=self.cores)(delayed(fill_examples)( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ] ) for id in range(self.cores))
+        exams = []
+        oval = []
+        for i in range(self.cores):
+            exams = exams + res[i][0]
+            oval = oval + res[i][1]
+        oval = np.asarray(oval)
+
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
