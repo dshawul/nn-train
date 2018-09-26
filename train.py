@@ -104,6 +104,7 @@ class NNet():
         self.lr = args.lr
         self.cores = args.cores
         self.nets = args.nets
+        self.rsav = args.rsav
 
         self.model = []
         if args.nets >= 1 :
@@ -171,12 +172,12 @@ class NNet():
         else:
             return v[0]
 
-    def save_checkpoint(self, folder, filename):
+    def save_checkpoint(self, folder, filename, iopt=False):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
         for i in range(len(self.model)):
-            self.model[i].save(filepath + "-model-" + str(i))
+            self.model[i].save(filepath + "-model-" + str(i), include_optimizer=iopt)
 
     def load_checkpoint(self, folder, filename):
         filepath = os.path.join(folder, filename)
@@ -277,7 +278,10 @@ def train_pgn(myNet,myPgn,zipped=0,start=1):
                 print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
                 myNet.train(examples)
-                myNet.save_checkpoint("nets","ID-" + str(chunk))
+                if chunk % myNet.rsav == 0:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), True)
+                else:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk))
 
                 examples = []
                 start_t = time.time()
@@ -341,7 +345,10 @@ def train_epd(myNet,myEpd,zipped=0,start=1):
                 print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk , " ending at position ", count
                 myNet.train(examples)
-                myNet.save_checkpoint("nets","ID-" + str(chunk))
+                if chunk % myNet.rsav == 0:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), True)
+                else:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk))
 
                 examples = []
                 start_t = time.time()
@@ -413,6 +420,7 @@ def main(argv):
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--nets','-n',dest='nets', required=False, type=int, default=3, help='Number of nets to train from 2x32,6x64,12x128,20x256,40x256.')
+    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=20, help='Save restart file with optimization state every RSAV chunks.')
 
     args = parser.parse_args()
 
@@ -432,7 +440,7 @@ def main(argv):
             start = chunk * PGN_CHUNK_SIZE + 1
             train_pgn(myNet, args.pgn, args.gzip, start)
         elif args.epd != None:
-            start = chunk * EPD_CHUNK_SIZE * 80 + 1
+            start = chunk * EPD_CHUNK_SIZE + 1
             train_epd(myNet, args.epd, args.gzip, start)
         else:
             play(myNet)

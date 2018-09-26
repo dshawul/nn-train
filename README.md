@@ -6,7 +6,7 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	usage: train.py [-h] [--epd EPD] [--pgn PGN] [--id ID]
 	                [--batch-size BATCH_SIZE] [--epochs EPOCHS]
 	                [--learning-rate LR] [--chunk-size CHUNK_SIZE] [--cores CORES]
-	                [--gpus GPUS] [--gzip] [--nets NETS]
+	                [--gpus GPUS] [--gzip] [--nets NETS] [--rsav RSAV]
 
 	optional arguments:
 	  -h, --help            show this help message and exit
@@ -25,6 +25,9 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	  --gzip, -z            Process zipped file.
 	  --nets NETS, -n NETS  Number of nets to train from
 	                        2x32,6x64,12x128,20x256,40x256.
+	  --rsav RSAV           Save restart file with optimization state every RSAV
+	                        chunks.
+
 
 To train from a collection of games (PGN), e.g. ccrl.pgn:
     
@@ -44,6 +47,10 @@ Need to add input pipelining sometime in the future.
 Then to convert your keras model to protobuf tensorflow format:
     
     ./convert.sh ID-1-model-0
+
+To restart interrupted training from specific ID e.g. 120
+    
+    python train.py --epd quiet.epd --id 120
 
 You will get an `ID-1-model-0.pb` in the nets/ directory. Rename it to something recognizable such 
 as `net-6x64.pb` and put it some place it can be used by Scorpio.
