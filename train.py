@@ -84,8 +84,8 @@ def fill_examples(examples):
     oval = list(oval)
 
     exams = []
+    bb = chess.Board()
     for i,p in enumerate(epds):
-        bb = chess.Board()
         bb.set_epd(p)
         if bb.turn == chess.BLACK:
             bb = bb.mirror()
@@ -103,6 +103,7 @@ class NNet():
         self.epochs = args.epochs
         self.lr = args.lr
         self.cores = args.cores
+        self.nets = args.nets
 
         self.model = []
         if args.nets >= 1 :
@@ -180,7 +181,8 @@ class NNet():
     def load_checkpoint(self, folder, filename):
         filepath = os.path.join(folder, filename)
         for i in range(len(self.model)):
-            self.model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
+            if self.nets >= i + 1:
+                self.model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
 
 
 def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
