@@ -102,13 +102,19 @@ class NNet():
         self.batch_size = args.batch_size
         self.epochs = args.epochs
         self.lr = args.lr
+        self.cores = args.cores
 
         self.model = []
-        self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
-        self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
-        self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
-        # self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
+        if args.nets >= 1 :
+            self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
+        if args.nets >= 2 :
+            self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
+        if args.nets >= 3 :
+            self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
+        if args.nets >= 4 :
+            self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
+        if args.nets >= 5 :
+            self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
 
         self.opt = optimizers.Adam(lr=self.lr)
         for i in range(len(self.model)):
@@ -117,8 +123,6 @@ class NNet():
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
-        self.b = chess.Board()
-        self.cores = args.cores
 
     def train(self,examples):
         print "Generating input planes using", self.cores, "cores"
@@ -149,14 +153,15 @@ class NNet():
                   epochs=self.epochs)
 
     def predict(self, epd):
-        self.b.set_epd(epd)
+        bb = chess.Board()
+        bb.set_epd(epd)
         inv = False
-        if self.b.turn == chess.BLACK:
-            self.b = self.b.mirror()
+        if bb.turn == chess.BLACK:
+            bb = bb.mirror()
             inv = True
         iplanes = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
         iparams = np.zeros(shape=(NPARMS),dtype=np.float32)
-        fill_planes(iplanes,iparams,self.b)
+        fill_planes(iplanes,iparams,bb)
         inp1 = iplanes[np.newaxis, :, :, :]
         inp2 = iparams[np.newaxis, :]
         v = self.model[0].predict([inp1, inp2])
@@ -169,12 +174,13 @@ class NNet():
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
-        for i,m in enumerate(self.model):
-            m.save(filepath + "-model-" + str(i))
+        for i in range(len(self.model)):
+            self.model[i].save(filepath + "-model-" + str(i))
 
     def load_checkpoint(self, folder, filename):
         filepath = os.path.join(folder, filename)
-        self.model[0] = load_model(filepath  + "-model-" + str(0), {'tf': tf})
+        for i in range(len(self.model)):
+            self.model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
 
 
 def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
@@ -397,13 +403,14 @@ def main(argv):
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
     parser.add_argument('--pgn','-p', dest='pgn', required=False, help='Path to PGN file for training.')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
-    parser.add_argument('--batch-size',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
+    parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
     parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
-    parser.add_argument('--gzip',dest='gzip', required=False, action='store_true',help='Process zipped file.')
+    parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
+    parser.add_argument('--nets','-n',dest='nets', required=False, type=int, default=3, help='Number of nets to train from 2x32,6x64,12x128,20x256,40x256.')
 
     args = parser.parse_args()
 
