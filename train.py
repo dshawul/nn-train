@@ -108,15 +108,15 @@ class NNet():
         self.rsavo = args.rsavo
 
         self.model = []
-        if args.nets >= 1 :
+        if 1 in args.nets:
             self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
-        if args.nets >= 2 :
+        if 2 in args.nets:
             self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
-        if args.nets >= 3 :
+        if 3 in args.nets:
             self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
-        if args.nets >= 4 :
+        if 4 in args.nets:
             self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
-        if args.nets >= 5 :
+        if 5 in args.nets:
             self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
 
         self.opt = optimizers.Adam(lr=self.lr)
@@ -420,12 +420,13 @@ def main(argv):
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
-    parser.add_argument('--nets','-n',dest='nets', required=False, type=int, default=3, help='Number of nets to train from 2x32,6x64,12x128,20x256,40x256.')
-    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=20, help='Save graph every RSAV chunks.')
+    parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[1,2,3], \
+                        help='Nets to train from 1=2x32,6x64,12x128,20x256,5=40x256.')
+    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
 
     args = parser.parse_args()
-
+    
     if args.pgn != None and args.epd != None:
         convert_pgn_to_epd(args.pgn, args.epd, args.gzip)
     else :
