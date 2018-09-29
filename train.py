@@ -105,6 +105,7 @@ class NNet():
         self.cores = args.cores
         self.nets = args.nets
         self.rsav = args.rsav
+        self.rsavo = args.rsavo
 
         self.model = []
         if args.nets >= 1 :
@@ -278,10 +279,10 @@ def train_pgn(myNet,myPgn,zipped=0,start=1):
                 print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
                 myNet.train(examples)
-                if chunk % myNet.rsav == 0:
+                if chunk % myNet.rsavo == 0:
                     myNet.save_checkpoint("nets","ID-" + str(chunk), True)
-                else:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk))
+                elif chunk % myNet.rsav == 0:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), False)
 
                 examples = []
                 start_t = time.time()
@@ -345,10 +346,10 @@ def train_epd(myNet,myEpd,zipped=0,start=1):
                 print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk , " ending at position ", count
                 myNet.train(examples)
-                if chunk % myNet.rsav == 0:
+                if chunk % myNet.rsavo == 0:
                     myNet.save_checkpoint("nets","ID-" + str(chunk), True)
-                else:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk))
+                elif chunk % myNet.rsav == 0:
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), False)
 
                 examples = []
                 start_t = time.time()
@@ -420,7 +421,8 @@ def main(argv):
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--nets','-n',dest='nets', required=False, type=int, default=3, help='Number of nets to train from 2x32,6x64,12x128,20x256,40x256.')
-    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=20, help='Save restart file with optimization state every RSAV chunks.')
+    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=20, help='Save graph every RSAV chunks.')
+    parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
 
     args = parser.parse_args()
 

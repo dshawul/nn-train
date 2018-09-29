@@ -7,6 +7,7 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	                [--batch-size BATCH_SIZE] [--epochs EPOCHS]
 	                [--learning-rate LR] [--chunk-size CHUNK_SIZE] [--cores CORES]
 	                [--gpus GPUS] [--gzip] [--nets NETS] [--rsav RSAV]
+	                [--rsavo RSAVO]
 
 	optional arguments:
 	  -h, --help            show this help message and exit
@@ -25,8 +26,8 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	  --gzip, -z            Process zipped file.
 	  --nets NETS, -n NETS  Number of nets to train from
 	                        2x32,6x64,12x128,20x256,40x256.
-	  --rsav RSAV           Save restart file with optimization state every RSAV
-	                        chunks.
+	  --rsav RSAV           Save graph every RSAV chunks.
+	  --rsavo RSAVO         Save optimization state every RSAVO chunks.
 
 
 To train from a collection of games (PGN), e.g. ccrl.pgn:
