@@ -149,6 +149,7 @@ class ResnetBuilder(object):
         main_input = Input(shape=main_input_shape, name='main_input')
         aux_input = Input(shape=aux_input_shape, name = 'aux_input')
         x = main_input
+        y = aux_input
 
         # convolution block
         x = _conv_bn_relu(filters=filters, kernel_size=(3, 3), strides=(1, 1))(x)
@@ -161,9 +162,11 @@ class ResnetBuilder(object):
         # value head
         x = _conv_bn_relu(filters=1, kernel_size=(1, 1), strides=(1, 1))(x)
         x = Flatten()(x)
-        x = concatenate([x, aux_input])
         x = Dense(256, activation='tanh')(x)
-        output = Dense(1, activation='sigmoid')(x)
+        y = Dense( 32, activation='tanh')(y)
+        x = concatenate([x, y])
+        x = Dense( 32, activation='tanh')(x)
+        output = Dense(1, activation='sigmoid', name='value')(x)
 
         # model
         model = Model(inputs=[main_input, aux_input], outputs=output)
