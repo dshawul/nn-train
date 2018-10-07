@@ -4,7 +4,6 @@ import time
 import chess
 import chess.pgn
 import resnet
-import multigpu
 import argparse
 import time
 import gzip
@@ -14,6 +13,7 @@ from joblib import Parallel, delayed
 
 from keras.models import load_model
 from keras import optimizers
+from keras.utils.training_utils import multi_gpu_model
 import tensorflow as tf
 
 CHANNELS = 12
@@ -97,6 +97,18 @@ def fill_examples(examples):
 
     return exams, oval
 
+def buildModels(model, args):
+    if 1 in args.nets:
+        model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
+    if 2 in args.nets:
+        model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
+    if 3 in args.nets:
+        model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
+    if 4 in args.nets:
+        model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
+    if 5 in args.nets:
+        model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
+
 class NNet():
     def __init__(self,args):
         self.batch_size = args.batch_size
@@ -107,22 +119,17 @@ class NNet():
         self.rsav = args.rsav
         self.rsavo = args.rsavo
 
-        self.model = []
-        if 1 in args.nets:
-            self.model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
-        if 2 in args.nets:
-            self.model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
-        if 3 in args.nets:
-            self.model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
-        if 4 in args.nets:
-            self.model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
-        if 5 in args.nets:
-            self.model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
+        self.cpu_model = []
+        with tf.device('/cpu:0'):
+            buildModels(self.cpu_model,args)
 
         self.opt = optimizers.Adam(lr=self.lr)
-        for i in range(len(self.model)):
-            if args.gpus != 0:
-                self.model[i] = multigpu.multi_gpu_model(self.model[i], gpus=args.gpus)
+        self.model = []
+        for i in range(len(self.cpu_model)):
+            if args.gpus > 1:
+                self.model.append( multi_gpu_model(self.cpu_model[i], gpus=args.gpus) )
+            else:
+                self.model.append( self.cpu_model[i] )
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
@@ -178,13 +185,13 @@ class NNet():
         if not os.path.exists(folder):
             os.mkdir(folder)
         for i in range(len(self.model)):
-            self.model[i].save(filepath + "-model-" + str(i), include_optimizer=iopt)
+            self.cpu_model[i].save(filepath + "-model-" + str(i), include_optimizer=iopt)
 
     def load_checkpoint(self, folder, filename):
         filepath = os.path.join(folder, filename)
         for i in range(len(self.model)):
             if self.nets >= i + 1:
-                self.model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
+                self.cpu_model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
 
 
 def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
