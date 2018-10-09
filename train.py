@@ -97,7 +97,7 @@ def fill_examples(examples):
 
     return exams, oval
 
-def buildModels(model, args):
+def build_models(model, args):
     if 1 in args.nets:
         model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
     if 2 in args.nets:
@@ -119,13 +119,15 @@ class NNet():
         self.rsav = args.rsav
         self.rsavo = args.rsavo
 
+    def new_model(self,args):
         self.cpu_model = []
         if args.gpus > 1:
             with tf.device('/cpu:0'):
-                buildModels(self.cpu_model,args)
+                build_models(self.cpu_model,args)
         else:
-            buildModels(self.cpu_model,args)
+            build_models(self.cpu_model,args)
 
+    def compile_model(self,args):
         self.opt = optimizers.Adam(lr=self.lr)
         self.model = []
         for i in range(len(self.cpu_model)):
@@ -144,7 +146,8 @@ class NNet():
         nsz = len(examples)
         nlen = nsz / self.cores
         
-        res = Parallel(n_jobs=self.cores)(delayed(fill_examples)( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ] ) for id in range(self.cores))
+        res = Parallel(n_jobs=self.cores)(delayed(fill_examples)\
+            ( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ] ) for id in range(self.cores))
         exams = []
         oval = []
         for i in range(self.cores):
@@ -187,15 +190,14 @@ class NNet():
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
-        for i in range(len(self.model)):
+        for i in range(len(self.cpu_model)):
             self.cpu_model[i].save(filepath + "-model-" + str(i), include_optimizer=iopt)
 
-    def load_checkpoint(self, folder, filename):
+    def load_checkpoint(self, folder, filename, args):
         filepath = os.path.join(folder, filename)
-        for i in range(len(self.model)):
-            if self.nets >= i + 1:
-                self.cpu_model[i] = load_model(filepath  + "-model-" + str(i), {'tf': tf})
-
+        self.cpu_model = []
+        for i in args.nets:
+            self.cpu_model.append( load_model(filepath  + "-model-" + str(i-1)) )
 
 def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
     
@@ -442,12 +444,18 @@ def main(argv):
     else :
         myNet = NNet(args)
 
+        global PGN_CHUNK_SIZE
+        global EPD_CHUNK_SIZE
         PGN_CHUNK_SIZE = args.chunk_size
         EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
         chunk = args.id
 
         if chunk > 0:
-            myNet.load_checkpoint("nets","ID-" + str(chunk))
+            myNet.load_checkpoint("nets","ID-" + str(chunk), args)
+        else:
+            myNet.new_model(args)
+
+        myNet.compile_model(args)
 
         if args.pgn != None:
             start = chunk * PGN_CHUNK_SIZE + 1
