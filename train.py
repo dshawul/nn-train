@@ -97,17 +97,20 @@ def fill_examples(examples):
 
     return exams, oval
 
-def build_models(model, args):
-    if 1 in args.nets:
-        model.append( resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,)) )
-    if 2 in args.nets:
-        model.append( resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,)) )
-    if 3 in args.nets:
-        model.append( resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,)) )
-    if 4 in args.nets:
-        model.append( resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,)) )
-    if 5 in args.nets:
-        model.append( resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,)) )
+def build_model(cid):
+    if cid == 1:
+        return resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,))
+    elif cid == 2:
+        return resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,))
+    elif cid == 3:
+        return resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,))
+    elif cid == 4:
+        return resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,))
+    elif cid == 5:
+        return resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,))
+    else:
+        print "Unsupported network id (Use 1 to 5)."
+        sys.exit()
 
 class NNet():
     def __init__(self,args):
@@ -119,13 +122,12 @@ class NNet():
         self.rsav = args.rsav
         self.rsavo = args.rsavo
 
-    def new_model(self,args):
-        self.cpu_model = []
+    def new_model(self,cid,args):
         if args.gpus > 1:
             with tf.device('/cpu:0'):
-                build_models(self.cpu_model,args)
+                return build_model(cid)
         else:
-            build_models(self.cpu_model,args)
+            return build_model(cid)
 
     def compile_model(self,args):
         self.opt = optimizers.Adam(lr=self.lr)
@@ -197,7 +199,11 @@ class NNet():
         filepath = os.path.join(folder, filename)
         self.cpu_model = []
         for i in args.nets:
-            self.cpu_model.append( load_model(filepath  + "-model-" + str(i-1)) )
+            fname = filepath  + "-model-" + str(i-1)
+            if not os.path.exists(fname):
+                self.cpu_model.append( self.new_model(i,args) )
+            else:
+                self.cpu_model.append( load_model(fname) )
 
 def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
     
@@ -450,10 +456,7 @@ def main(argv):
         EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
         chunk = args.id
 
-        if chunk > 0:
-            myNet.load_checkpoint("nets","ID-" + str(chunk), args)
-        else:
-            myNet.new_model(args)
+        myNet.load_checkpoint("nets","ID-" + str(chunk), args)
 
         myNet.compile_model(args)
 
