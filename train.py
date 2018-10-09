@@ -120,7 +120,10 @@ class NNet():
         self.rsavo = args.rsavo
 
         self.cpu_model = []
-        with tf.device('/cpu:0'):
+        if args.gpus > 1:
+            with tf.device('/cpu:0'):
+                buildModels(self.cpu_model,args)
+        else:
             buildModels(self.cpu_model,args)
 
         self.opt = optimizers.Adam(lr=self.lr)
