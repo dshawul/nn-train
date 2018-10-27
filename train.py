@@ -130,7 +130,7 @@ class NNet():
             return build_model(cid)
 
     def compile_model(self,args):
-        self.opt = optimizers.Adam(lr=self.lr)
+        self.opt = optimizers.SGD(lr=self.lr)
         self.model = []
         for i in range(len(self.cpu_model)):
             if args.gpus > 1:
@@ -188,20 +188,21 @@ class NNet():
         else:
             return v[0]
 
-    def save_checkpoint(self, folder, filename, iopt=False):
+    def save_checkpoint(self, folder, filename, args, iopt=False):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
-        for i in range(len(self.cpu_model)):
-            self.cpu_model[i].save(filepath + "-model-" + str(i), include_optimizer=iopt)
+        for i,n in enumerate(args.nets):
+            fname = filepath  + "-model-" + str(n-1)
+            self.cpu_model[i].save(fname, include_optimizer=iopt)
 
     def load_checkpoint(self, folder, filename, args):
         filepath = os.path.join(folder, filename)
         self.cpu_model = []
-        for i in args.nets:
-            fname = filepath  + "-model-" + str(i-1)
+        for n in args.nets:
+            fname = filepath  + "-model-" + str(n-1)
             if not os.path.exists(fname):
-                self.cpu_model.append( self.new_model(i,args) )
+                self.cpu_model.append( self.new_model(n,args) )
             else:
                 self.cpu_model.append( load_model(fname) )
 
@@ -265,7 +266,7 @@ def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
                     else:
                         cap_prom_check = False
 
-def train_pgn(myNet,myPgn,zipped=0,start=1):
+def train_pgn(myNet,args,myPgn,zipped=0,start=1):
 
     with (open(myPgn) if not zipped else gzip.open(myPgn)) as file:
         count = 0
@@ -298,9 +299,9 @@ def train_pgn(myNet,myPgn,zipped=0,start=1):
                 print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
                 myNet.train(examples)
                 if chunk % myNet.rsavo == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), True)
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, True)
                 elif chunk % myNet.rsav == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), False)
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
 
                 examples = []
                 start_t = time.time()
@@ -340,7 +341,7 @@ def train_pgn(myNet,myPgn,zipped=0,start=1):
                         cap_prom_check = False
                 
 
-def train_epd(myNet,myEpd,zipped=0,start=1):
+def train_epd(myNet,args,myEpd,zipped=0,start=1):
 
     with (open(myEpd) if not zipped else gzip.open(myEpd)) as file:
         count = 0
@@ -365,9 +366,9 @@ def train_epd(myNet,myEpd,zipped=0,start=1):
                 print "Training on chunk ", chunk , " ending at position ", count
                 myNet.train(examples)
                 if chunk % myNet.rsavo == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), True)
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, True)
                 elif chunk % myNet.rsav == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), False)
+                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
 
                 examples = []
                 start_t = time.time()
@@ -442,6 +443,7 @@ def main(argv):
                         help='Nets to train from 1=2x32,6x64,12x128,20x256,5=40x256.')
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
+    parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
 
     args = parser.parse_args()
     
@@ -460,12 +462,14 @@ def main(argv):
 
         myNet.compile_model(args)
 
-        if args.pgn != None:
+        if args.rand:
+            myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
+        elif args.pgn != None:
             start = chunk * PGN_CHUNK_SIZE + 1
-            train_pgn(myNet, args.pgn, args.gzip, start)
+            train_pgn(myNet, args, args.pgn, args.gzip, start)
         elif args.epd != None:
             start = chunk * EPD_CHUNK_SIZE + 1
-            train_epd(myNet, args.epd, args.gzip, start)
+            train_epd(myNet, args, args.epd, args.gzip, start)
         else:
             play(myNet)
 
