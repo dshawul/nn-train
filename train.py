@@ -14,6 +14,7 @@ from joblib import Parallel, delayed
 from keras.models import load_model
 from keras import optimizers
 from keras.utils.training_utils import multi_gpu_model
+from keras import backend as K
 import tensorflow as tf
 
 CHANNELS = 12
@@ -130,7 +131,10 @@ class NNet():
             return build_model(cid)
 
     def compile_model(self,args):
-        self.opt = optimizers.SGD(lr=self.lr)
+        if args.opt == 0:
+            self.opt = optimizers.SGD(lr=self.lr)
+        else:
+            self.opt = optimizers.Adam(lr=self.lr)
         self.model = []
         for i in range(len(self.cpu_model)):
             if args.gpus > 1:
@@ -140,6 +144,23 @@ class NNet():
             self.model[i].compile(loss='mean_squared_error',
                   optimizer=self.opt,
                   metrics=['accuracy'])
+
+    def set_lr(self,args,count):
+        NPOS = args.npos
+        if NPOS == 0:
+            return
+
+        if count <= NPOS/8:
+            args.lr = 0.2
+        elif count <= NPOS/2:
+            args.lr = 0.02
+        elif count <= 3 * NPOS/4:
+            args.lr = 0.002
+        else:
+            args.lr = 0.0002
+
+        for i in range(len(self.cpu_model)):
+            K.set_value(self.model[i].optimizer.lr, args.lr)
 
     def train(self,examples):
         print "Generating input planes using", self.cores, "cores"
@@ -339,16 +360,16 @@ def train_pgn(myNet,args,myPgn,zipped=0,start=1):
                         cap_prom_check = True
                     else:
                         cap_prom_check = False
-                
 
 def train_epd(myNet,args,myEpd,zipped=0,start=1):
-
+    
     with (open(myEpd) if not zipped else gzip.open(myEpd)) as file:
         count = 0
 
         examples = []
         start_t = time.time()
         print "Collecting data"
+        myNet.set_lr(args,count)
 
         while True:
 
@@ -363,7 +384,7 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                 chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
                 end_t = time.time()
                 print "Time", int(end_t - start_t), "sec"
-                print "Training on chunk ", chunk , " ending at position ", count
+                print "Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr
                 myNet.train(examples)
                 if chunk % myNet.rsavo == 0:
                     myNet.save_checkpoint("nets","ID-" + str(chunk), args, True)
@@ -373,6 +394,7 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                 examples = []
                 start_t = time.time()
                 print "Collecting data" 
+                myNet.set_lr(args,count)
 
             #break out
             if not line:
@@ -390,8 +412,16 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                 result = 1.0
             elif sresult == '0-1':
                 result = 0.0
-            else:
+            elif sresult == '1/2-1/2':
                 result = 0.5
+            else:
+                result = float(sresult)
+                if result >= 0.58:
+                    result = 1
+                elif result <= 0.42:
+                    result = 0
+                else:
+                    result = 0.5
 
             # add to examples
             examples.append([epd,result])
@@ -444,6 +474,8 @@ def main(argv):
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
+    parser.add_argument('--npos',dest='npos', required=False, type=int, default=0, help='Number of positions in the training set.')
+    parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
 
     args = parser.parse_args()
     

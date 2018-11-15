@@ -4,9 +4,11 @@ set -e
 
 #setup parameters for selfplay
 SC=../Scorpio # path to scorpio exec
-LR=0.2        # learning rate
 SV=800        # mcts simulations
 G=125         # games per worker
+OPT=0         # Optimizer 0=SGD 1=ADAM
+LR=0.2        # learning rate
+EPOCHS=1      # Number of epochs
 
 #display help
 display_help() {
@@ -94,7 +96,7 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd ${SC}/games.epd --nets $(($1+1)) --gpus ${GPUS} --cores ${CPUS} --learning-rate ${LR}
+    python train.py --epd ${SC}/games.epd --nets $(($1+1)) --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
 }
 
 #driver loop
