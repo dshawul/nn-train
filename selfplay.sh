@@ -5,7 +5,7 @@ set -e
 #setup parameters for selfplay
 SC=../Scorpio # path to scorpio exec
 SV=800        # mcts simulations
-G=125         # games per worker
+G=500         # games per worker
 OPT=0         # Optimizer 0=SGD 1=ADAM
 LR=0.2        # learning rate
 EPOCHS=1      # Number of epochs
@@ -111,6 +111,8 @@ while true ; do
     cat games.pgn >> allgames.pgn
     ./scorpio pgn_to_epd games.pgn games.epd quit
     rm -rf games.pgn games*.pgn
+    shuf games.epd >x
+    mv x games.epd
 
     cd -
 
