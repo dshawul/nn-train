@@ -166,7 +166,7 @@ class ResnetBuilder(object):
         y = Dense( 32, activation='tanh')(y)
         x = concatenate([x, y])
         x = Dense( 32, activation='tanh')(x)
-        output = Dense(1, activation='sigmoid', name='value')(x)
+        output = Dense(3, activation='softmax', name='value')(x)
 
         # model
         model = Model(inputs=[main_input, aux_input], outputs=output)

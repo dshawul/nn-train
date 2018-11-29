@@ -27,6 +27,12 @@ def fill_piece(iplanes, ix, bb, b, fk):
     squares = chess.SquareSet(bb)
     for sq in squares:
         abb = abb | b.attacks_mask(sq)
+        # f = chess.square_file(sq)
+        # r = chess.square_rank(sq)
+        # if(fk < 4):
+        #     iplanes[r, 7-f, ix + 12] = 1.0
+        # else:
+        #     iplanes[r,  f,  ix + 12] = 1.0
     squares = chess.SquareSet(abb)
     for sq in squares:
         f = chess.square_file(sq)
@@ -90,7 +96,10 @@ def fill_examples(examples):
         bb.set_epd(p)
         if bb.turn == chess.BLACK:
             bb = bb.mirror()
-            oval[i] = 1 - oval[i]
+            if oval[i][0] == 1:
+                oval[i] = [0.0, 0.0, 1.0]
+            elif oval[i][2] == 1:
+                oval[i] = [1.0, 0.0, 0.0]
         iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
         iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
         fill_planes(iplane,iparam,bb)
@@ -141,7 +150,7 @@ class NNet():
                 self.model.append( multi_gpu_model(self.cpu_model[i], gpus=args.gpus) )
             else:
                 self.model.append( self.cpu_model[i] )
-            self.model[i].compile(loss='mean_squared_error',
+            self.model[i].compile(loss='categorical_crossentropy',
                   optimizer=self.opt,
                   metrics=['accuracy'])
 
@@ -189,6 +198,7 @@ class NNet():
             print "Fitting model",i
             self.model[i].fit(x = [ipls, ipars], y = oval,
                   batch_size=self.batch_size,
+                  validation_split=0.1,
                   epochs=self.epochs)
 
     def predict(self, epd):
@@ -204,10 +214,10 @@ class NNet():
         inp1 = iplanes[np.newaxis, :, :, :]
         inp2 = iparams[np.newaxis, :]
         v = self.model[0].predict([inp1, inp2])
+        r = (v[0] * 1.0 + v[1] * 0.5)
         if inv:
-            return 1 - v[0]
-        else:
-            return v[0]
+            r = 1 - r
+        return r
 
     def save_checkpoint(self, folder, filename, args, iopt=False):
         filepath = os.path.join(folder, filename)
@@ -335,11 +345,11 @@ def train_pgn(myNet,args,myPgn,zipped=0,start=1):
             #parse result
             sresult = game.headers["Result"]
             if sresult == '1-0':
-                result = 1.0
+                result = [1.0, 0.0, 0.0]
             elif sresult == '0-1':
-                result = 0.0
+                result = [0.0, 0.0, 1.0]
             else:
-                result = 0.5
+                result = [0.0, 1.0, 0.0]
 
             #iterate through the moves and add quiescent positions
             b = game.board()
@@ -409,19 +419,11 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             # parse result
             sresult = words[-1]
             if sresult == '1-0':
-                result = 1.0
+                result = [1.0, 0.0, 0.0]
             elif sresult == '0-1':
-                result = 0.0
-            elif sresult == '1/2-1/2':
-                result = 0.5
+                result = [0.0, 0.0, 1.0]
             else:
-                result = float(sresult)
-                if result >= 0.58:
-                    result = 1
-                elif result <= 0.42:
-                    result = 0
-                else:
-                    result = 0.5
+                result = [0.0, 1.0, 0.0]
 
             # add to examples
             examples.append([epd,result])
