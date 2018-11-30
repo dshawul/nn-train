@@ -1,12 +1,10 @@
-from __future__ import division
-
-import six
 from keras.models import Model
 from keras.layers import (
     Input,
     Activation,
     Dense,
     Flatten,
+    Add,
     concatenate
 )
 from keras.layers.convolutional import (
@@ -21,6 +19,45 @@ from keras import backend as K
 ROW_AXIS = 1
 COL_AXIS = 2
 CHANNEL_AXIS = 3
+
+def build_a0net(x, blocks,filters):
+    """Build A0 style resnet
+    """
+
+    #Convolution block
+    x = Conv2D(filters=filters, kernel_size=(3,3),
+                      strides=(1,1), padding="same",
+                      kernel_initializer="he_normal",
+                      kernel_regularizer=l2(1.e-4))(x)
+    x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+    x = Activation("relu")(x)
+
+    #Residual blocks
+    for i in range(blocks-1):
+        inp = x
+        x = Conv2D(filters=filters, kernel_size=(3,3),
+                  strides=(1,1), padding="same",
+                  kernel_initializer="he_normal",
+                  kernel_regularizer=l2(1.e-4))(x)
+        x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+        x = Activation("relu")(x)
+        x = Conv2D(filters=filters, kernel_size=(3,3),
+                  strides=(1,1), padding="same",
+                  kernel_initializer="he_normal",
+                  kernel_regularizer=l2(1.e-4))(x)
+        x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+        x = Add()([x,inp])
+        x = Activation("relu")(x)
+
+    #value head
+    x = Conv2D(filters=1, kernel_size=(1,1),
+                      strides=(1,1), padding="same",
+                      kernel_initializer="he_normal",
+                      kernel_regularizer=l2(1.e-4))(x)
+    x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+    x = Activation("relu")(x)
+
+    return x
 
 def _bn_relu(input):
     """Helper to build a BN -> relu block
@@ -129,65 +166,43 @@ def basic_block(filters, init_strides=(1, 1), is_first_block_of_first_layer=Fals
 
     return f
 
+def build_a1net(x, blocks, filters):
 
-class ResnetBuilder(object):
-    @staticmethod
-    def build(main_input_shape, aux_input_shape, block_fn, repetitions, filters):
-        """Builds a custom ResNet like architecture.
+    # convolution block
+    x = _conv_bn_relu(filters=filters, kernel_size=(3, 3), strides=(1, 1))(x)
 
-        Args:
-            main_input_shape, aux_input_shape: Input shapes in tf format
-            block_fn: The block function to use. This is either `basic_block` or `bottleneck`.
-                The original paper used basic_block for layers < 50
-            repetitions: Number of repetitions of various block units.
-            filters: Number of filters 
+    # residual blocks
+    repetitions = [2]*(blocks/2)
+    repetitions[0] = 1
+    for i, r in enumerate(repetitions):
+        x = _residual_block(basic_block, filters=filters, repetitions=r, is_first_layer=(i == 0))(x)
+    x = _bn_relu(x)
+    
+    # value head
+    x = _conv_bn_relu(filters=1, kernel_size=(1, 1), strides=(1, 1))(x)
 
-        Returns:
-            The keras `Model`.
-        """
+    return x
 
-        main_input = Input(shape=main_input_shape, name='main_input')
-        aux_input = Input(shape=aux_input_shape, name = 'aux_input')
-        x = main_input
-        y = aux_input
+def build_net(main_input_shape, aux_input_shape, blocks, filters):
+    """Builds a custom ResNet like architecture.
+    """
 
-        # convolution block
-        x = _conv_bn_relu(filters=filters, kernel_size=(3, 3), strides=(1, 1))(x)
+    main_input = Input(shape=main_input_shape, name='main_input')
+    aux_input = Input(shape=aux_input_shape, name = 'aux_input')
+    x = main_input
+    y = aux_input
 
-        # residual blocks
-        for i, r in enumerate(repetitions):
-            x = _residual_block(block_fn, filters=filters, repetitions=r, is_first_layer=(i == 0))(x)
-        x = _bn_relu(x)
+    # x = build_a1net(x, blocks, filters)
+    x = build_a0net(x, blocks, filters)
 
-        # value head
-        x = _conv_bn_relu(filters=1, kernel_size=(1, 1), strides=(1, 1))(x)
-        x = Flatten()(x)
-        x = Dense(256, activation='tanh')(x)
-        y = Dense( 32, activation='tanh')(y)
-        x = concatenate([x, y])
-        x = Dense( 32, activation='tanh')(x)
-        output = Dense(3, activation='softmax', name='value')(x)
+    # value head
+    x = Flatten()(x)
+    x = Dense(256, activation='tanh')(x)
+    y = Dense( 32, activation='tanh')(y)
+    x = concatenate([x, y])
+    x = Dense( 32, activation='tanh')(x)
+    output = Dense(3, activation='softmax', name='value')(x)
 
-        # model
-        model = Model(inputs=[main_input, aux_input], outputs=output)
-        return model
-
-    @staticmethod
-    def build_resnet_2x32(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1], 32)
-
-    @staticmethod
-    def build_resnet_6x64(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2], 64)
-        
-    @staticmethod
-    def build_resnet_12x128(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2], 128)
-
-    @staticmethod
-    def build_resnet_20x256(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2,2,2,2,2], 256)
-
-    @staticmethod
-    def build_resnet_40x256(main_input_shape, aux_input_shape):
-        return ResnetBuilder.build(main_input_shape, aux_input_shape, basic_block, [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], 256)
+    # model
+    model = Model(inputs=[main_input, aux_input], outputs=output)
+    return model

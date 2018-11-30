@@ -17,7 +17,7 @@ from keras.utils.training_utils import multi_gpu_model
 from keras import backend as K
 import tensorflow as tf
 
-CHANNELS = 12
+CHANNELS = 24
 NPARMS = 5
 PGN_CHUNK_SIZE = 4096
 EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
@@ -27,12 +27,12 @@ def fill_piece(iplanes, ix, bb, b, fk):
     squares = chess.SquareSet(bb)
     for sq in squares:
         abb = abb | b.attacks_mask(sq)
-        # f = chess.square_file(sq)
-        # r = chess.square_rank(sq)
-        # if(fk < 4):
-        #     iplanes[r, 7-f, ix + 12] = 1.0
-        # else:
-        #     iplanes[r,  f,  ix + 12] = 1.0
+        f = chess.square_file(sq)
+        r = chess.square_rank(sq)
+        if(fk < 4):
+            iplanes[r, 7-f, ix + 12] = 1.0
+        else:
+            iplanes[r,  f,  ix + 12] = 1.0
     squares = chess.SquareSet(abb)
     for sq in squares:
         f = chess.square_file(sq)
@@ -109,15 +109,15 @@ def fill_examples(examples):
 
 def build_model(cid):
     if cid == 1:
-        return resnet.ResnetBuilder.build_resnet_2x32((8, 8, CHANNELS), (NPARMS,))
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  2,  32)
     elif cid == 2:
-        return resnet.ResnetBuilder.build_resnet_6x64((8, 8, CHANNELS), (NPARMS,))
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  6,  64)
     elif cid == 3:
-        return resnet.ResnetBuilder.build_resnet_12x128((8, 8, CHANNELS), (NPARMS,))
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 12, 128)
     elif cid == 4:
-        return resnet.ResnetBuilder.build_resnet_20x256((8, 8, CHANNELS), (NPARMS,))
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 20, 256)
     elif cid == 5:
-        return resnet.ResnetBuilder.build_resnet_40x256((8, 8, CHANNELS), (NPARMS,))
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 40, 256)
     else:
         print "Unsupported network id (Use 1 to 5)."
         sys.exit()
