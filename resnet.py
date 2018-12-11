@@ -1,3 +1,4 @@
+from __future__ import division
 from keras.models import Model
 from keras.layers import (
     Input,
@@ -28,6 +29,7 @@ def build_a0net(x, blocks,filters):
     x = Conv2D(filters=filters, kernel_size=(3,3),
                       strides=(1,1), padding="same",
                       kernel_initializer="he_normal",
+                      use_bias=False,
                       kernel_regularizer=l2(1.e-4))(x)
     x = BatchNormalization(axis=CHANNEL_AXIS)(x)
     x = Activation("relu")(x)
@@ -38,12 +40,14 @@ def build_a0net(x, blocks,filters):
         x = Conv2D(filters=filters, kernel_size=(3,3),
                   strides=(1,1), padding="same",
                   kernel_initializer="he_normal",
+                  use_bias=False,
                   kernel_regularizer=l2(1.e-4))(x)
         x = BatchNormalization(axis=CHANNEL_AXIS)(x)
         x = Activation("relu")(x)
         x = Conv2D(filters=filters, kernel_size=(3,3),
                   strides=(1,1), padding="same",
                   kernel_initializer="he_normal",
+                  use_bias=False,
                   kernel_regularizer=l2(1.e-4))(x)
         x = BatchNormalization(axis=CHANNEL_AXIS)(x)
         x = Add()([x,inp])
@@ -53,6 +57,7 @@ def build_a0net(x, blocks,filters):
     x = Conv2D(filters=1, kernel_size=(1,1),
                       strides=(1,1), padding="same",
                       kernel_initializer="he_normal",
+                      use_bias=False,
                       kernel_regularizer=l2(1.e-4))(x)
     x = BatchNormalization(axis=CHANNEL_AXIS)(x)
     x = Activation("relu")(x)
@@ -172,7 +177,7 @@ def build_a1net(x, blocks, filters):
     x = _conv_bn_relu(filters=filters, kernel_size=(3, 3), strides=(1, 1))(x)
 
     # residual blocks
-    repetitions = [2]*(blocks/2)
+    repetitions = [2]*int(blocks/2)
     repetitions[0] = 1
     for i, r in enumerate(repetitions):
         x = _residual_block(basic_block, filters=filters, repetitions=r, is_first_layer=(i == 0))(x)

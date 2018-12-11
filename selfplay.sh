@@ -5,9 +5,9 @@ set -e
 #setup parameters for selfplay
 SC=../Scorpio # path to scorpio exec
 SV=800        # mcts simulations
-G=500         # games per worker
-OPT=0         # Optimizer 0=SGD 1=ADAM
-LR=0.2        # learning rate
+G=2500        # games per worker
+OPT=1         # Optimizer 0=SGD 1=ADAM
+LR=0.001      # learning rate
 EPOCHS=1      # Number of epochs
 
 #display help
@@ -31,6 +31,16 @@ if [ ! -f ${SC}/scorpio ]; then
     exit 0
 fi
 
+#number of cpus and gpus
+CPUS=`grep -c ^processor /proc/cpuinfo`
+if [ ! -z `which nvidia-smi` ]; then
+    GPUS=`nvidia-smi | grep "N/A" | wc -l`
+    NDIR=$PWD/nets/ID-0-model-$1.uff
+else
+    GPUS=0
+    NDIR=$PWD/nets/ID-0-model-$1.pb
+fi
+
 #initialize network
 init() {
     echo "Initializing training."
@@ -39,6 +49,11 @@ init() {
     mkdir nets/hist
     python train.py --rand --nets $(($1+1))
     ./convert.sh ID-0-model-$1
+    if [ $GPUS -gt 0 ]; then
+        convert-to-uff nets/ID-0-model-$1.pb
+        cp nets/ID-0-model-$1.uff nets/hist/net-0.uff
+    fi
+    cp nets/ID-0-model-$1 nets/hist/net-0
     cp nets/ID-0-model-$1.pb nets/hist/net-0.pb
     rm -rf ${SC}/allgames.pgn ${SC}/games.pgn
 }
@@ -59,17 +74,8 @@ else
 fi
 
 #start network id
-V=`ls -l nets/hist | grep net | wc -l`
+V=`ls -l nets/hist/*.pb | grep net | wc -l`
 V=$((V-1))
-NDIR=$PWD/nets/ID-0-model-$1.pb
-
-#number of cpus and gpus
-CPUS=`grep -c ^processor /proc/cpuinfo`
-if [ ! -z `which nvidia-smi` ]; then
-    GPUS=`nvidia-smi | grep "N/A" | wc -l`
-else
-    GPUS=0
-fi
 
 #run selfplay
 run() {
@@ -101,7 +107,11 @@ train() {
 
 #driver loop
 while true ; do
+    cp nets/ID-0-model-$1 nets/hist/net-${V}
     cp nets/ID-0-model-$1.pb nets/hist/net-${V}.pb
+    if [ $GPUS -gt 0 ]; then
+        cp nets/ID-0-model-$1.uff nets/hist/net-${V}.uff
+    fi
 
     cd ${SC}
     
@@ -119,6 +129,8 @@ while true ; do
     train $1
     mv nets/ID-1-model-$1 nets/ID-0-model-$1
     ./convert.sh ID-0-model-$1
-
+    if [ $GPUS -gt 0 ]; then
+        convert-to-uff nets/ID-0-model-$1.pb
+    fi
     V=$((V+1))
 done

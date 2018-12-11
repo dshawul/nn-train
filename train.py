@@ -214,7 +214,7 @@ class NNet():
         inp1 = iplanes[np.newaxis, :, :, :]
         inp2 = iparams[np.newaxis, :]
         v = self.model[0].predict([inp1, inp2])
-        r = (v[0] * 1.0 + v[1] * 0.5)
+        r = (v[0][0] * 1.0 + v[0][1] * 0.5)
         if inv:
             r = 1 - r
         return r
