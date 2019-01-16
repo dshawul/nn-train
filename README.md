@@ -3,22 +3,24 @@ Chess neural network training program. This program takes chess games or result-
 epd positions and trains a neural network for prediction of the outcome of a game from a positon. 
 So this is only a `value network` -- AlphaZero also has `policy network` that represent move probabilities.
 
-	usage: train.py [-h] [--epd EPD] [--pgn PGN] [--id ID]
-	                [--batch-size BATCH_SIZE] [--epochs EPOCHS]
-	                [--learning-rate LR] [--chunk-size CHUNK_SIZE] [--cores CORES]
-	                [--gpus GPUS] [--gzip] [--nets NETS [NETS ...]] [--rsav RSAV]
-	                [--rsavo RSAVO] [--rand]
+	usage: train.py [-h] [--epd EPD] [--id ID] [--batch-size BATCH_SIZE]
+	                [--epochs EPOCHS] [--learning-rate LR]
+	                [--vald-split VALD_SPLIT] [--chunk-size CHUNK_SIZE]
+	                [--cores CORES] [--gpus GPUS] [--gzip]
+	                [--nets NETS [NETS ...]] [--rsav RSAV] [--rsavo RSAVO]
+	                [--rand] [--npos NPOS] [--opt OPT]
 
 	optional arguments:
 	  -h, --help            show this help message and exit
 	  --epd EPD, -e EPD     Path to labeled EPD file for training
-	  --pgn PGN, -p PGN     Path to PGN file for training.
 	  --id ID, -i ID        ID of neural network to load.
 	  --batch-size BATCH_SIZE, -b BATCH_SIZE
 	                        Training batch size.
 	  --epochs EPOCHS       Training epochs.
 	  --learning-rate LR, -l LR
 	                        Training learning rate.
+	  --vald-split VALD_SPLIT
+	                        Fraction of sample to use for validation.
 	  --chunk-size CHUNK_SIZE
 	                        PGN chunk size.
 	  --cores CORES         Number of cores to use.
@@ -29,6 +31,8 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	  --rsav RSAV           Save graph every RSAV chunks.
 	  --rsavo RSAVO         Save optimization state every RSAVO chunks.
 	  --rand                Generate random network.
+	  --npos NPOS           Number of positions in the training set.
+	  --opt OPT             Optimizer 0=SGD 1=Adam.
 
 
 To train from a collection of games (PGN), e.g. ccrl.pgn:

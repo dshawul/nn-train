@@ -15,12 +15,15 @@ from keras.models import load_model
 from keras import optimizers
 from keras.utils.training_utils import multi_gpu_model
 from keras import backend as K
+from keras.utils import np_utils
 import tensorflow as tf
 
 CHANNELS = 24
 NPARMS = 5
 PGN_CHUNK_SIZE = 4096
 EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
+NPOLICY = 1858
+NVALUE = 3
 
 def fill_piece(iplanes, ix, bb, b, fk):
     abb = 0
@@ -29,18 +32,13 @@ def fill_piece(iplanes, ix, bb, b, fk):
         abb = abb | b.attacks_mask(sq)
         f = chess.square_file(sq)
         r = chess.square_rank(sq)
-        if(fk < 4):
-            iplanes[r, 7-f, ix + 12] = 1.0
-        else:
-            iplanes[r,  f,  ix + 12] = 1.0
+        iplanes[r,  f,  ix + 12] = 1.0
+
     squares = chess.SquareSet(abb)
     for sq in squares:
         f = chess.square_file(sq)
         r = chess.square_rank(sq)
-        if(fk < 4):
-            iplanes[r, 7-f, ix] = 1.0
-        else:
-            iplanes[r,  f,  ix] = 1.0
+        iplanes[r,  f,  ix] = 1.0
 
 
 def fill_planes(iplanes, iparams, b):
@@ -87,25 +85,31 @@ def fill_planes(iplanes, iparams, b):
     iparams[4] = v
 
 def fill_examples(examples):
-    epds, oval = list(zip(*examples))
+    epds, oval, opol = list(zip(*examples))
     oval = list(oval)
+    opol = list(opol)
 
     exams = []
+
     bb = chess.Board()
     for i,p in enumerate(epds):
         bb.set_epd(p)
         if bb.turn == chess.BLACK:
             bb = bb.mirror()
-            if oval[i][0] == 1:
-                oval[i] = [0.0, 0.0, 1.0]
-            elif oval[i][2] == 1:
-                oval[i] = [1.0, 0.0, 0.0]
+            oval[i] = 2 - oval[i]
+
+        #position with inputs
         iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
         iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
         fill_planes(iplane,iparam,bb)
-        exams.append([iplane,iparam])
 
-    return exams, oval
+        #value and policy
+        ivalue = oval[i]
+        ipolicy = opol[i]
+
+        exams.append([iplane,iparam,ivalue,ipolicy])
+
+    return exams
 
 def build_model(cid):
     if cid == 1:
@@ -127,6 +131,7 @@ class NNet():
         self.batch_size = args.batch_size
         self.epochs = args.epochs
         self.lr = args.lr
+        self.vald_split = args.vald_split
         self.cores = args.cores
         self.nets = args.nets
         self.rsav = args.rsav
@@ -144,13 +149,14 @@ class NNet():
             self.opt = optimizers.SGD(lr=self.lr)
         else:
             self.opt = optimizers.Adam(lr=self.lr)
+            
         self.model = []
         for i in range(len(self.cpu_model)):
             if args.gpus > 1:
                 self.model.append( multi_gpu_model(self.cpu_model[i], gpus=args.gpus) )
             else:
                 self.model.append( self.cpu_model[i] )
-            self.model[i].compile(loss='categorical_crossentropy',
+            self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
                   optimizer=self.opt,
                   metrics=['accuracy'])
 
@@ -181,43 +187,26 @@ class NNet():
         res = Parallel(n_jobs=self.cores)(delayed(fill_examples)\
             ( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ] ) for id in range(self.cores))
         exams = []
-        oval = []
         for i in range(self.cores):
-            exams = exams + res[i][0]
-            oval = oval + res[i][1]
-        oval = np.asarray(oval)
+            exams = exams + res[i]
 
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
-        ipls, ipars = list(zip(*exams))
+        ipls, ipars, oval, opol = list(zip(*exams))
         ipls = np.asarray(ipls)
         ipars = np.asarray(ipars)
+        oval = np.asarray(oval)
+        opol = np.asarray(opol)
+        oval = np_utils.to_categorical(oval, NVALUE)
+        opol = np_utils.to_categorical(opol, NPOLICY)
 
         for i in range(len(self.model)):
             print "Fitting model",i
-            self.model[i].fit(x = [ipls, ipars], y = oval,
+            self.model[i].fit(x = [ipls, ipars], y = [oval, opol],
                   batch_size=self.batch_size,
-                  validation_split=0.1,
+                  validation_split=self.vald_split,
                   epochs=self.epochs)
-
-    def predict(self, epd):
-        bb = chess.Board()
-        bb.set_epd(epd)
-        inv = False
-        if bb.turn == chess.BLACK:
-            bb = bb.mirror()
-            inv = True
-        iplanes = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
-        iparams = np.zeros(shape=(NPARMS),dtype=np.float32)
-        fill_planes(iplanes,iparams,bb)
-        inp1 = iplanes[np.newaxis, :, :, :]
-        inp2 = iparams[np.newaxis, :]
-        v = self.model[0].predict([inp1, inp2])
-        r = (v[0][0] * 1.0 + v[0][1] * 0.5)
-        if inv:
-            r = 1 - r
-        return r
 
     def save_checkpoint(self, folder, filename, args, iopt=False):
         filepath = os.path.join(folder, filename)
@@ -237,139 +226,6 @@ class NNet():
             else:
                 self.cpu_model.append( load_model(fname) )
 
-def convert_pgn_to_epd(myPgn,myEpd,zipped=0,start=1):
-    
-    with (open(myPgn) if not zipped else gzip.open(myPgn)) as file, open(myEpd,'w') as efile:
-        count = 0
-
-        start_t = time.time()
-        print "Collecting data"
-        
-        while True:
-
-            #read game
-            count = count + 1
-            if count < start:
-                for of in chess.pgn.scan_offsets(file):
-                    if count >= start:
-                        file.seek(of)
-                        game = chess.pgn.read_game(file)
-                        count = count + 1
-                        break;
-                    count = count + 1
-                continue
-            else:
-                game = chess.pgn.read_game(file)
-
-            #train network
-            if (not game) or (count % PGN_CHUNK_SIZE == 0):
-                chunk = (count + PGN_CHUNK_SIZE - 1) / PGN_CHUNK_SIZE
-                end_t = time.time()
-                print "Time", int(end_t - start_t), "sec"
-
-                start_t = time.time()
-                print "Collecting data" 
-
-            #break out
-            if not game:
-                break
-
-            #parse result
-            sresult = game.headers["Result"]
-
-            #iterate through the moves and add quiescent positions
-            b = game.board()
-            cap_prom_check = False or b.is_check()
-            for move in game.main_line():
-                if b.is_capture(move) or move.promotion:
-                    cap_prom_check = True
-                    b.push(move)
-                else:
-                    pfen = b.fen()
-                    b.push(move)
-                    ischeck = b.is_check()
-
-                    if not (cap_prom_check or ischeck):
-                        efile.write(pfen + ' ' + sresult + '\n')
-                        
-                    if ischeck:
-                        cap_prom_check = True
-                    else:
-                        cap_prom_check = False
-
-def train_pgn(myNet,args,myPgn,zipped=0,start=1):
-
-    with (open(myPgn) if not zipped else gzip.open(myPgn)) as file:
-        count = 0
-
-        examples = []
-        start_t = time.time()
-        print "Collecting data"
-        
-        while True:
-
-            #read game
-            count = count + 1
-            if count < start:
-                for of in chess.pgn.scan_offsets(file):
-                    if count >= start:
-                        file.seek(of)
-                        game = chess.pgn.read_game(file)
-                        count = count + 1
-                        break;
-                    count = count + 1
-                continue
-            else:
-                game = chess.pgn.read_game(file)
-
-            #train network
-            if (not game) or (count % PGN_CHUNK_SIZE == 0):
-                chunk = (count + PGN_CHUNK_SIZE - 1) / PGN_CHUNK_SIZE
-                end_t = time.time()
-                print "Time", int(end_t - start_t), "sec"
-                print "Training on chunk ", chunk, " ending at game ", count, " positions ", len(examples)
-                myNet.train(examples)
-                if chunk % myNet.rsavo == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, True)
-                elif chunk % myNet.rsav == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
-
-                examples = []
-                start_t = time.time()
-                print "Collecting data" 
-
-            #break out
-            if not game:
-                break
-
-            #parse result
-            sresult = game.headers["Result"]
-            if sresult == '1-0':
-                result = [1.0, 0.0, 0.0]
-            elif sresult == '0-1':
-                result = [0.0, 0.0, 1.0]
-            else:
-                result = [0.0, 1.0, 0.0]
-
-            #iterate through the moves and add quiescent positions
-            b = game.board()
-            cap_prom_check = False or b.is_check()
-            for move in game.main_line():
-                if b.is_capture(move) or move.promotion:
-                    cap_prom_check = True
-                    b.push(move)
-                else:
-                    pfen = b.fen()
-                    b.push(move)
-                    ischeck = b.is_check()
-
-                    if not (cap_prom_check or ischeck):
-                        examples.append([pfen,result])
-                        
-                    if ischeck:
-                        cap_prom_check = True
-                    else:
-                        cap_prom_check = False
 
 def train_epd(myNet,args,myEpd,zipped=0,start=1):
     
@@ -413,60 +269,32 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             #get epd
             words = line.strip().split()
             epd = ''
-            for i in range(0, len(words) - 1):
+            for i in range(0, len(words) - 2):
                 epd = epd + words[i] + ' '
 
             # parse result
-            sresult = words[-1]
-            if sresult == '1-0':
-                result = [1.0, 0.0, 0.0]
-            elif sresult == '0-1':
-                result = [0.0, 0.0, 1.0]
+            svalue = words[-2]
+            if svalue == '1-0':
+                value = 0
+            elif svalue == '0-1':
+                value = 2
             else:
-                result = [0.0, 1.0, 0.0]
+                value = 1
+
+            # parse move
+            policy = int(words[-1])
 
             # add to examples
-            examples.append([epd,result])
-
-def play(myNet):
-    b = chess.Board()
-    while not b.is_game_over():
-        print(b)
-        while True:
-            mvstr = raw_input("Your move: ")
-            mv = chess.Move.from_uci(mvstr)
-            if b.is_legal(mv):
-                b.push(mv)
-                break
-            else:
-                print "Illegal move"
-
-        print(b)
-        moves = b.generate_legal_moves()
-
-        bestm = 0
-        beste = 0
-        for move in moves:
-            b.push(move)
-            eval = 1 - myNet.predict(b.fen())
-            b.pop()
-            if eval > beste:
-                bestm = move
-                beste = eval
-            print move, eval
-
-        b.push(bestm)
-        print "My move: ", bestm, "Score ", 100 * beste
-
+            examples.append([epd,value,policy])
 
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
-    parser.add_argument('--pgn','-p', dest='pgn', required=False, help='Path to PGN file for training.')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
+    parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.0, help='Fraction of sample to use for validation.')
     parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
@@ -481,31 +309,23 @@ def main(argv):
 
     args = parser.parse_args()
     
-    if args.pgn != None and args.epd != None:
-        convert_pgn_to_epd(args.pgn, args.epd, args.gzip)
-    else :
-        myNet = NNet(args)
+    myNet = NNet(args)
 
-        global PGN_CHUNK_SIZE
-        global EPD_CHUNK_SIZE
-        PGN_CHUNK_SIZE = args.chunk_size
-        EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
-        chunk = args.id
+    global PGN_CHUNK_SIZE
+    global EPD_CHUNK_SIZE
+    PGN_CHUNK_SIZE = args.chunk_size
+    EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
+    chunk = args.id
 
-        myNet.load_checkpoint("nets","ID-" + str(chunk), args)
+    myNet.load_checkpoint("nets","ID-" + str(chunk), args)
 
-        myNet.compile_model(args)
+    myNet.compile_model(args)
 
-        if args.rand:
-            myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
-        elif args.pgn != None:
-            start = chunk * PGN_CHUNK_SIZE + 1
-            train_pgn(myNet, args, args.pgn, args.gzip, start)
-        elif args.epd != None:
-            start = chunk * EPD_CHUNK_SIZE + 1
-            train_epd(myNet, args, args.epd, args.gzip, start)
-        else:
-            play(myNet)
+    if args.rand:
+        myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
+    elif args.epd != None:
+        start = chunk * EPD_CHUNK_SIZE + 1
+        train_epd(myNet, args, args.epd, args.gzip, start)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
