@@ -5,17 +5,17 @@ from keras.layers import (
     Dense,
     Flatten,
     Add,
-    Concatenate
+    Concatenate,
+    Reshape
 )
 from keras.layers.convolutional import Conv2D
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
 
-NPOLICY = 1858
 NVALUE = 3
 CHANNEL_AXIS = 3
 
-def build_a0net(x, blocks,filters):
+def build_a0net(x, blocks,filters, policy):
     """Build A0 style resnet
     """
 
@@ -57,17 +57,28 @@ def build_a0net(x, blocks,filters):
     vx = Activation("relu")(vx)
 
     #policy head
+    if policy == 1:
+        px = Conv2D(filters=filters, kernel_size=(3,3),
+                          strides=(1,1), padding="same",
+                          kernel_initializer="he_normal",
+                          use_bias=False,
+                          kernel_regularizer=l2(1.e-4))(x)
+        px = BatchNormalization(axis=CHANNEL_AXIS)(px)
+        px = Activation("relu")(px)
+    else:
+      px = x
+
     px = Conv2D(filters=73, kernel_size=(1,1),
                       strides=(1,1), padding="same",
                       kernel_initializer="he_normal",
                       use_bias=False,
-                      kernel_regularizer=l2(1.e-4))(x)
+                      kernel_regularizer=l2(1.e-4))(px)
     px = BatchNormalization(axis=CHANNEL_AXIS)(px)
     px = Activation("relu")(px)
 
     return vx,px
 
-def build_net(main_input_shape, aux_input_shape, blocks, filters):
+def build_net(main_input_shape, aux_input_shape, blocks, filters, policy):
     """Builds a custom ResNet like architecture.
     """
 
@@ -76,7 +87,7 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters):
     x = main_input
     y = aux_input
 
-    vx,px = build_a0net(x, blocks, filters)
+    vx,px = build_a0net(x, blocks, filters, policy)
 
     # value head
     x = Flatten()(vx)
@@ -87,8 +98,12 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters):
     value = Dense(NVALUE, activation='softmax', name='value')(x)
 
     # policy head
-    x = Flatten('channels_first')(px)
-    policy = Dense(NPOLICY, activation='softmax', name='policy')(x)
+    if policy == 0:
+        x = Flatten('channels_first')(px)
+        policy = Dense(1858, activation='softmax', name='policy')(x)
+    else:
+        x = Reshape((4672,), name='policy')(px)
+        policy = Activation("softmax")(x)
 
     # model
     model = Model(inputs=[main_input, aux_input], outputs=[value, policy])

@@ -22,7 +22,6 @@ CHANNELS = 24
 NPARMS = 5
 PGN_CHUNK_SIZE = 4096
 EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
-NPOLICY = 1858
 NVALUE = 3
 
 def fill_piece(iplanes, ix, bb, b, fk):
@@ -84,44 +83,195 @@ def fill_planes(iplanes, iparams, b):
     v = chess.popcount(b.pawns & b.occupied_co[pl]) - chess.popcount(b.pawns & b.occupied_co[npl])
     iparams[4] = v
 
-def fill_examples(examples):
-    epds, oval, opol = list(zip(*examples))
-    oval = list(oval)
-    opol = list(opol)
+
+move_map = [
+     0,  0,  0,  0,  0,  0,  0,  0,  0, 35,  0,  0,  0,  0,  0,  0,
+    27,  0,  0,  0,  0,  0,  0, 55,  0,  0, 36,  0,  0,  0,  0,  0,
+    26,  0,  0,  0,  0,  0, 54,  0,  0,  0,  0, 37,  0,  0,  0,  0,
+    25,  0,  0,  0,  0, 53,  0,  0,  0,  0,  0,  0, 38,  0,  0,  0,
+    24,  0,  0,  0, 52,  0,  0,  0,  0,  0,  0,  0,  0, 39,  0,  0,
+    23,  0,  0, 51,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 40, 60,
+    22, 56, 50,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 61, 41,
+    21, 49, 57,  0,  0,  0,  0,  0,  0,  7,  8,  9, 10, 11, 12, 13,
+     0,  0,  1,  2,  3,  4,  5,  6,  0,  0,  0,  0,  0,  0, 63, 48,
+    14, 28, 59,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 47, 62,
+    15, 58, 29,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 46,  0,  0,
+    16,  0,  0, 30,  0,  0,  0,  0,  0,  0,  0,  0, 45,  0,  0,  0,
+    17,  0,  0,  0, 31,  0,  0,  0,  0,  0,  0, 44,  0,  0,  0,  0,
+    18,  0,  0,  0,  0, 32,  0,  0,  0,  0, 43,  0,  0,  0,  0,  0,
+    19,  0,  0,  0,  0,  0, 33,  0,  0, 42,  0,  0,  0,  0,  0,  0,
+    20,  0,  0,  0,  0,  0,  0, 34,  0,  0,  0,  0,  0,  0,  0,  0
+    ]
+
+attack_map = [
+    0,  0,  0,  0,  0,  0,  0,  0,  0, 10,  0,  0,  0,  0,  0,  0,
+    6,  0,  0,  0,  0,  0,  0, 10,  0,  0, 10,  0,  0,  0,  0,  0,
+    6,  0,  0,  0,  0,  0, 10,  0,  0,  0,  0, 10,  0,  0,  0,  0,
+    6,  0,  0,  0,  0, 10,  0,  0,  0,  0,  0,  0, 10,  0,  0,  0,
+    6,  0,  0,  0, 10,  0,  0,  0,  0,  0,  0,  0,  0, 10,  0,  0,
+    6,  0,  0, 10,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 10, 16,
+    6, 16, 10,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 16, 75,
+    7, 75, 16,  0,  0,  0,  0,  0,  0,  6,  6,  6,  6,  6,  6,  7,
+    0,  7,  6,  6,  6,  6,  6,  6,  0,  0,  0,  0,  0,  0, 16, 43,
+    7, 43, 16,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 10, 16,
+    6, 16, 10,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 10,  0,  0,
+    6,  0,  0, 10,  0,  0,  0,  0,  0,  0,  0,  0, 10,  0,  0,  0,
+    6,  0,  0,  0, 10,  0,  0,  0,  0,  0,  0, 10,  0,  0,  0,  0,
+    6,  0,  0,  0,  0, 10,  0,  0,  0,  0, 10,  0,  0,  0,  0,  0,
+    6,  0,  0,  0,  0,  0, 10,  0,  0, 10,  0,  0,  0,  0,  0,  0,
+    6,  0,  0,  0,  0,  0,  0, 10,  0,  0,  0,  0,  0,  0,  0,  0
+    ]
+
+def SQ6488(x):
+    return x + (x & 56)
+
+move_index_table = None
+
+def init_index_table():
+
+    global move_index_table
+
+    MOVE_TAB_SIZE = 64*64+8*3*3
+
+    move_index_table = [0] * MOVE_TAB_SIZE
+
+    cnt = 0
+
+    for fr in range(64):
+        for to in range(64):
+            if fr != to:
+                if attack_map[128 + SQ6488(to) - SQ6488(fr)]:
+                    move_index_table[fr * 64 + to] = cnt
+                    cnt = cnt + 1
+
+    for fr in range(48,56):
+
+        idx = 4096 + chess.square_file(fr) * 9
+
+        if fr > 48 :
+            move_index_table[idx+0] = cnt
+            cnt = cnt + 1
+            move_index_table[idx+1] = cnt
+            cnt = cnt + 1
+            move_index_table[idx+2] = cnt
+            cnt = cnt + 1
+
+        move_index_table[idx+3] = cnt
+        cnt = cnt + 1
+        move_index_table[idx+4] = cnt
+        cnt = cnt + 1
+        move_index_table[idx+5] = cnt
+        cnt = cnt + 1
+
+        if fr < 55 :
+            move_index_table[idx+6] = cnt
+            cnt = cnt + 1
+            move_index_table[idx+7] = cnt
+            cnt = cnt + 1
+            move_index_table[idx+8] = cnt
+            cnt = cnt + 1
+
+def compute_move_index(b, mvstr, pol):
+
+    mv = chess.Move.from_uci(mvstr)
+    fr = mv.from_square
+    to = mv.to_square
+    prom = mv.promotion
+
+    if b.is_castling(mv):
+        if to > fr:
+            to += 1;
+        else:
+            to -= 2
+
+    if b.turn == chess.BLACK:
+        fr = chess.square_mirror(fr)
+        to = chess.square_mirror(to)
+
+    if pol == 0:
+        compi = fr * 64 + to
+        if prom:
+            if prom != chess.KNIGHT:
+                compi = 4096 +  chess.square_file(fr) * 9 + \
+                        (to - fr - 7) * 3 + (chess.QUEEN - prom)
+
+        index = move_index_table[compi]
+    else:
+        index = fr * 73
+        if prom:
+            if prom != chess.QUEEN:
+                index += 64 + (to - fr - 7) * 3  + (chess.QUEEN - prom)
+            else:
+                index += move_map[128 + SQ6488(to) - SQ6488(fr)]
+        else:
+            index += move_map[128 + SQ6488(to) - SQ6488(fr)]
+
+    return index
+
+
+def decode(line):
+
+    words = line.strip().split()
+    epd = ''
+    for i in range(0, len(words) - 2):
+        epd = epd + words[i] + ' '
+
+    # parse result
+    svalue = words[-2]
+    if svalue == '1-0':
+        value = 0
+    elif svalue == '0-1':
+        value = 2
+    else:
+        value = 1
+
+    # parse move
+    policy = words[-1].lower()
+
+    return epd,value,policy
+
+def fill_examples(examples, polt):
 
     exams = []
 
     bb = chess.Board()
-    for i,p in enumerate(epds):
-        bb.set_epd(p)
+    for i,p in enumerate(examples):
+        epd,val,pol = decode(p)
+
+        bb.set_epd(epd)
+        
+        #policy
+        ipolicy = compute_move_index(bb,pol,polt)
+
+        #flip board
         if bb.turn == chess.BLACK:
             bb = bb.mirror()
-            oval[i] = 2 - oval[i]
+            val = 2 - val
 
-        #position with inputs
+        #value
+        ivalue = val
+
+        #input planes
         iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
         iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
         fill_planes(iplane,iparam,bb)
-
-        #value and policy
-        ivalue = oval[i]
-        ipolicy = opol[i]
-
+        
         exams.append([iplane,iparam,ivalue,ipolicy])
 
     return exams
 
-def build_model(cid):
+def build_model(cid,policy):
+
     if cid == 1:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  2,  32)
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  2,  32, policy)
     elif cid == 2:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  6,  64)
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  6,  64, policy)
     elif cid == 3:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 12, 128)
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 12, 128, policy)
     elif cid == 4:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 20, 256)
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 20, 256, policy)
     elif cid == 5:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 40, 256)
+        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 40, 256, policy)
     else:
         print "Unsupported network id (Use 1 to 5)."
         sys.exit()
@@ -136,13 +286,14 @@ class NNet():
         self.nets = args.nets
         self.rsav = args.rsav
         self.rsavo = args.rsavo
+        self.pol = args.policy
 
     def new_model(self,cid,args):
         if args.gpus > 1:
             with tf.device('/cpu:0'):
-                return build_model(cid)
+                return build_model(cid, args.policy)
         else:
-            return build_model(cid)
+            return build_model(cid, args.policy)
 
     def compile_model(self,args):
         if args.opt == 0:
@@ -185,7 +336,7 @@ class NNet():
         nlen = nsz / self.cores
         
         res = Parallel(n_jobs=self.cores)(delayed(fill_examples)\
-            ( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ] ) for id in range(self.cores))
+            ( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ], self.pol ) for id in range(self.cores))
         exams = []
         for i in range(self.cores):
             exams = exams + res[i]
@@ -199,6 +350,10 @@ class NNet():
         oval = np.asarray(oval)
         opol = np.asarray(opol)
         oval = np_utils.to_categorical(oval, NVALUE)
+        if self.pol == 0:
+            NPOLICY = 1858
+        else:
+            NPOLICY = 4672
         opol = np_utils.to_categorical(opol, NPOLICY)
 
         for i in range(len(self.model)):
@@ -226,9 +381,11 @@ class NNet():
             else:
                 self.cpu_model.append( load_model(fname) )
 
-
 def train_epd(myNet,args,myEpd,zipped=0,start=1):
-    
+
+    if args.policy == 0:
+        init_index_table()
+
     with (open(myEpd) if not zipped else gzip.open(myEpd)) as file:
         count = 0
 
@@ -266,26 +423,8 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             if not line:
                 break
 
-            #get epd
-            words = line.strip().split()
-            epd = ''
-            for i in range(0, len(words) - 2):
-                epd = epd + words[i] + ' '
-
-            # parse result
-            svalue = words[-2]
-            if svalue == '1-0':
-                value = 0
-            elif svalue == '0-1':
-                value = 2
-            else:
-                value = 1
-
-            # parse move
-            policy = int(words[-1])
-
             # add to examples
-            examples.append([epd,value,policy])
+            examples.append(line)
 
 def main(argv):
     parser = argparse.ArgumentParser()
@@ -306,6 +445,7 @@ def main(argv):
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--npos',dest='npos', required=False, type=int, default=0, help='Number of positions in the training set.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
+    parser.add_argument('--pol',dest='policy', required=False, type=int,default=0, help='Policy head style 0=Lc0 styel, 1=A0 style')
 
     args = parser.parse_args()
     
