@@ -5,7 +5,7 @@ from keras.layers import (
     Dense,
     Flatten,
     Add,
-    concatenate
+    Concatenate
 )
 from keras.layers.convolutional import Conv2D
 from keras.layers.normalization import BatchNormalization
@@ -13,8 +13,6 @@ from keras.regularizers import l2
 
 NPOLICY = 1858
 NVALUE = 3
-ROW_AXIS = 1
-COL_AXIS = 2
 CHANNEL_AXIS = 3
 
 def build_a0net(x, blocks,filters):
@@ -59,7 +57,7 @@ def build_a0net(x, blocks,filters):
     vx = Activation("relu")(vx)
 
     #policy head
-    px = Conv2D(filters=1, kernel_size=(1,1),
+    px = Conv2D(filters=73, kernel_size=(1,1),
                       strides=(1,1), padding="same",
                       kernel_initializer="he_normal",
                       use_bias=False,
@@ -84,12 +82,12 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters):
     x = Flatten()(vx)
     x = Dense(256, activation='tanh')(x)
     y = Dense( 32, activation='tanh')(y)
-    x = concatenate([x, y])
+    x = Concatenate()([x, y])
     x = Dense( 32, activation='tanh')(x)
     value = Dense(NVALUE, activation='softmax', name='value')(x)
 
     # policy head
-    x = Flatten()(px)
+    x = Flatten('channels_first')(px)
     policy = Dense(NPOLICY, activation='softmax', name='policy')(x)
 
     # model
