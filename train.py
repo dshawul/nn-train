@@ -5,7 +5,6 @@ import chess
 import chess.pgn
 import resnet
 import argparse
-import time
 import gzip
 import numpy as np
 import multiprocessing
@@ -445,7 +444,7 @@ def main(argv):
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--npos',dest='npos', required=False, type=int, default=0, help='Number of positions in the training set.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
-    parser.add_argument('--pol',dest='policy', required=False, type=int,default=0, help='Policy head style 0=Lc0 styel, 1=A0 style')
+    parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=Lc0 styel, 1=A0 style')
 
     args = parser.parse_args()
     
