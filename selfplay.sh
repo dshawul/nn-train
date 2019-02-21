@@ -3,20 +3,21 @@
 set -e
 
 #setup parameters for selfplay
-SC=~/Scorpio # path to scorpio exec
-SV=800        # mcts simulations
-G=2500        # games per worker
-OPT=1         # Optimizer 0=SGD 1=ADAM
-LR=0.001      # learning rate
-EPOCHS=1      # Number of epochs
+SC=~/Scorpio   # path to scorpio exec
+SV=800         # mcts simulations
+G=2500         # games per worker
+OPT=1          # Optimizer 0=SGD 1=ADAM
+LR=0.001       # learning rate
+EPOCHS=1       # Number of epochs
+NREPLAY=500000 # Number of games in the replay buffer
+NSTEPS=250     # Number of steps
 
 #display help
 display_help() {
-    echo "Usage: $0 [Option...] {ID} [init]" >&2
+    echo "Usage: $0 [Option...] {ID} " >&2
     echo
     echo "   -h     Display this help message."
     echo "   ID     Network ID to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
-    echo "   init   Reinitialize network training from scratch (optional)"
     echo
 }
 
@@ -48,15 +49,14 @@ init0() {
 }
 
 init() {
-    python train.py --rand --nets $(($1+1))
+    python train.py --rand --nets $1
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
-        convert-to-uff nets/ID-0-model-$1.pb
+        convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
         cp nets/ID-0-model-$1.uff nets/hist/ID-0-model-$1.uff
     fi
     cp nets/ID-0-model-$1 nets/hist/ID-0-model-$1
     cp nets/ID-0-model-$1.pb nets/hist/ID-0-model-$1.pb
-    rm -rf ${SC}/allgames.pgn ${SC}/games.pgn
 }
 
 fornets() {
@@ -67,31 +67,14 @@ fornets() {
     done
 }
 
-if [ -e nets ]; then
-    if [ "$1" = "init" ]; then
-        read -p "Are you sure you want to re-initialize [y/N]:" A
-        A=${A:-n}
-        case "$A" in
-            [nN]) 
-                ;;
-            *)
-                init0
-                if ! [ -z "$2" ]; then net[0]=$2; fi
-                if ! [ -z "$3" ]; then net[1]=$3; fi
-                if ! [ -z "$4" ]; then net[2]=$4; fi
-                if ! [ -z "$5" ]; then net[3]=$5; fi
-                if ! [ -z "$6" ]; then net[4]=$6; fi
-                fornets init
-                ;;
-        esac
-    fi
-else
+if ! [ -z "$1" ]; then net[0]=$1; fi
+if ! [ -z "$2" ]; then net[1]=$2; fi
+if ! [ -z "$3" ]; then net[2]=$3; fi
+if ! [ -z "$4" ]; then net[3]=$4; fi
+if ! [ -z "$5" ]; then net[4]=$5; fi
+
+if ! [ -e nets ]; then
     init0
-    if ! [ -z "$1" ]; then net[0]=$1; fi
-    if ! [ -z "$2" ]; then net[1]=$2; fi
-    if ! [ -z "$3" ]; then net[2]=$3; fi
-    if ! [ -z "$4" ]; then net[3]=$4; fi
-    if ! [ -z "$5" ]; then net[4]=$5; fi
     fornets init
 fi
 
@@ -119,6 +102,7 @@ rungames() {
         M=$((2**CPUS-1))
         run 0 $1 $M &
     else
+        rm -rf nets/*.trt
         I=$((CPUS/GPUS))
         M=$((2**I-1))
         for k in `seq 0 $((GPUS-1))`; do
@@ -132,7 +116,7 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd ${SC}/games.epd --nets $(($1+1)) --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
+    python train.py --epd nets/data.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
 }
 
 #move
@@ -149,8 +133,42 @@ conv() {
     mv nets/ID-1-model-$1 nets/ID-0-model-$1
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
-        convert-to-uff nets/ID-0-model-$1.pb
+        convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
     fi
+}
+
+#prepare training data
+prepare() {
+
+    #run games
+    cd ${SC}
+    
+    rungames ${G}
+    rm -rf games.pgn
+    cat games*.pgn > cgames.pgn
+    rm -rf games*.pgn
+
+    cd -
+
+    #convert to epd
+    mv ${SC}/cgames.pgn .
+    cat cgames.pgn >> nets/allgames.pgn
+    ${SC}/scorpio pgn_to_epd cgames.pgn nets/data$V.epd quit
+    rm -rf cgames.pgn
+
+    #prepare shuffled replay buffer
+    if [ $GPUS -gt 0 ]; then
+        ND=$((NREPLAY/(GPUS*G)))
+    else
+        ND=$((NREPLAY/(CPUS*G)))
+    fi
+    if [ $ND -gt $V ]; then
+        ND=$V
+    fi
+    cat nets/data[{$((V-ND))}-${V}].epd > nets/data.epd
+
+    shuf -n $((NSTEPS * 4096)) nets/data.epd >x
+    mv x nets/data.epd
 }
 
 #driver loop
@@ -158,21 +176,9 @@ while true ; do
 
     fornets move
 
-    cd ${SC}
-    
-    rungames ${G}
+    prepare
 
-    rm -rf games.pgn
-    cat games*.pgn > games.pgn
-    cat games.pgn >> allgames.pgn
-    ./scorpio pgn_to_epd games.pgn games.epd quit
-    rm -rf games.pgn games*.pgn
-    shuf games.epd >x
-    mv x games.epd
-
-    cd -
-
-    fornets train
+    train
 
     fornets conv
 

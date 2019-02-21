@@ -103,7 +103,7 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy):
         policy = Dense(1858, activation='softmax', name='policy')(x)
     else:
         x = Reshape((4672,), name='policy')(px)
-        policy = Activation("softmax")(x)
+        policy = Activation("softmax", name='policya')(x)
 
     # model
     model = Model(inputs=[main_input, aux_input], outputs=[value, policy])

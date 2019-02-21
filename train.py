@@ -261,18 +261,18 @@ def fill_examples(examples, polt):
 
 def build_model(cid,policy):
 
-    if cid == 1:
+    if cid == 0:
         return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  2,  32, policy)
-    elif cid == 2:
+    elif cid == 1:
         return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  6,  64, policy)
-    elif cid == 3:
+    elif cid == 2:
         return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 12, 128, policy)
-    elif cid == 4:
+    elif cid == 3:
         return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 20, 256, policy)
-    elif cid == 5:
+    elif cid == 4:
         return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 40, 256, policy)
     else:
-        print "Unsupported network id (Use 1 to 5)."
+        print "Unsupported network id (Use 0 to 4)."
         sys.exit()
 
 class NNet():
@@ -367,14 +367,14 @@ class NNet():
         if not os.path.exists(folder):
             os.mkdir(folder)
         for i,n in enumerate(args.nets):
-            fname = filepath  + "-model-" + str(n-1)
+            fname = filepath  + "-model-" + str(n)
             self.cpu_model[i].save(fname, include_optimizer=iopt)
 
     def load_checkpoint(self, folder, filename, args):
         filepath = os.path.join(folder, filename)
         self.cpu_model = []
         for n in args.nets:
-            fname = filepath  + "-model-" + str(n-1)
+            fname = filepath  + "-model-" + str(n)
             if not os.path.exists(fname):
                 self.cpu_model.append( self.new_model(n,args) )
             else:
@@ -437,8 +437,8 @@ def main(argv):
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
-    parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[1,2,3], \
-                        help='Nets to train from 1=2x32,6x64,12x128,20x256,5=40x256.')
+    parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[0,1,2], \
+                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=40x256.')
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
