@@ -3,9 +3,9 @@
 set -e
 
 #setup parameters for selfplay
-SC=~/Scorpio   # path to scorpio exec
+SC=~/Scorpio  # path to scorpio exec
 SV=800         # mcts simulations
-G=2500         # games per worker
+G=8000         # games per worker
 OPT=1          # Optimizer 0=SGD 1=ADAM
 LR=0.001       # learning rate
 EPOCHS=1       # Number of epochs
@@ -14,10 +14,10 @@ NSTEPS=250     # Number of steps
 
 #display help
 display_help() {
-    echo "Usage: $0 [Option...] {ID} " >&2
+    echo "Usage: $0 [Option...] {IDs} " >&2
     echo
     echo "   -h     Display this help message."
-    echo "   ID     Network ID to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
+    echo "   IDs    Network IDs to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
     echo
 }
 
@@ -87,8 +87,7 @@ else
 fi
 
 #start network id
-V=`ls -l nets/hist/*-model-${Pnet}.pb | grep net | wc -l`
-V=$((V-1))
+V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o [0-9]* | sort -rn | head -1`
 
 #run selfplay
 run() {
@@ -116,7 +115,7 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd nets/data.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
+    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
 }
 
 #move
@@ -130,31 +129,38 @@ move() {
 
 #convert
 conv() {
-    mv nets/ID-1-model-$1 nets/ID-0-model-$1
+    E=`ls -l nets/ID-*-model-$1 | wc -l`
+    E=$((E-1))
+    mv nets/ID-$E-model-$1 nets/ID-0-model-$1
+    rm -rf nets/ID-[1-$E]-model-$1
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
     fi
 }
 
-#prepare training data
-prepare() {
-
-    #run games
+#get selfplay games
+get_selfplay_games() {
     cd ${SC}
-    
     rungames ${G}
     rm -rf games.pgn
     cat games*.pgn > cgames.pgn
     rm -rf games*.pgn
-
     cd -
+    mv ${SC}/cgames.pgn .
+}
+
+#prepare training data
+prepare() {
+
+    rm -rf cgames.pgn
+
+    #run games
+    get_selfplay_games
 
     #convert to epd
-    mv ${SC}/cgames.pgn .
     cat cgames.pgn >> nets/allgames.pgn
     ${SC}/scorpio pgn_to_epd cgames.pgn nets/data$V.epd quit
-    rm -rf cgames.pgn
 
     #prepare shuffled replay buffer
     if [ $GPUS -gt 0 ]; then
@@ -162,25 +168,33 @@ prepare() {
     else
         ND=$((NREPLAY/(CPUS*G)))
     fi
-    if [ $ND -gt $V ]; then
+    if [ $ND -ge $V ]; then
         ND=$V
+    else
+        A=`seq 0 $((V-ND-1))`
+        for i in $A; do
+            rm -rf nets/data$i.epd
+        done
     fi
-    cat nets/data[{$((V-ND))}-${V}].epd > nets/data.epd
+    cat nets/data*.epd > nets/temp.epd
 
-    shuf -n $((NSTEPS * 4096)) nets/data.epd >x
-    mv x nets/data.epd
+    shuf -n $((NSTEPS * 4096)) nets/temp.epd >x
+    mv x nets/temp.epd
 }
 
-#driver loop
-while true ; do
+#Selfplay training loop
+selfplay_loop() {
+    while true ; do
+        fornets move
 
-    fornets move
+        prepare
 
-    prepare
+        train
 
-    train
+        fornets conv
 
-    fornets conv
+        V=$((V+1))
+    done
+}
 
-    V=$((V+1))
-done
+selfplay_loop
