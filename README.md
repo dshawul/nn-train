@@ -8,7 +8,7 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	                [--vald-split VALD_SPLIT] [--chunk-size CHUNK_SIZE]
 	                [--cores CORES] [--gpus GPUS] [--gzip]
 	                [--nets NETS [NETS ...]] [--rsav RSAV] [--rsavo RSAVO]
-	                [--rand] [--npos NPOS] [--opt OPT] [--pol POLICY]
+	                [--rand] [--opt OPT] [--pol POLICY]
 
 	optional arguments:
 	  -h, --help            show this help message and exit
@@ -31,7 +31,6 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
 	  --rsav RSAV           Save graph every RSAV chunks.
 	  --rsavo RSAVO         Save optimization state every RSAVO chunks.
 	  --rand                Generate random network.
-	  --npos NPOS           Number of positions in the training set.
 	  --opt OPT             Optimizer 0=SGD 1=Adam.
 	  --pol POLICY          Policy head style 0=Lc0 styel, 1=A0 style
 

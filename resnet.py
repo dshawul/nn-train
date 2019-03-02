@@ -12,7 +12,6 @@ from keras.layers.convolutional import Conv2D
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
 
-NVALUE = 3
 CHANNEL_AXIS = 3
 
 def build_a0net(x, blocks,filters, policy):
@@ -95,7 +94,7 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy):
     y = Dense( 32, activation='tanh')(y)
     x = Concatenate()([x, y])
     x = Dense( 32, activation='tanh')(x)
-    value = Dense(NVALUE, activation='softmax', name='value')(x)
+    value = Dense(3, activation='softmax', name='value')(x)
 
     # policy head
     if policy == 0:

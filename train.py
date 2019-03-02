@@ -19,11 +19,9 @@ import tensorflow as tf
 
 CHANNELS = 24
 NPARMS = 5
-PGN_CHUNK_SIZE = 4096
-EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
-NVALUE = 3
+EPD_CHUNK_SIZE = 4096 * 80
 
-def fill_piece(iplanes, ix, bb, b, fk):
+def fill_piece(iplanes, ix, bb, b):
     abb = 0
     squares = chess.SquareSet(bb)
     for sq in squares:
@@ -42,44 +40,42 @@ def fill_piece(iplanes, ix, bb, b, fk):
 def fill_planes(iplanes, iparams, b):
     pl = chess.WHITE
     npl = chess.BLACK
-    wksq = b.king(pl)
-    fwksq = chess.square_file(wksq)
     #white piece attacks
-    bb = b.kings & b.occupied_co[pl]
-    fill_piece(iplanes,0,bb,b,fwksq)
-    bb = b.queens & b.occupied_co[pl]
-    fill_piece(iplanes,1,bb,b,fwksq)
-    bb = b.rooks & b.occupied_co[pl]
-    fill_piece(iplanes,2,bb,b,fwksq)
+    bb = b.kings   & b.occupied_co[pl]
+    fill_piece(iplanes,0,bb,b)
+    bb = b.queens  & b.occupied_co[pl]
+    fill_piece(iplanes,1,bb,b)
+    bb = b.rooks   & b.occupied_co[pl]
+    fill_piece(iplanes,2,bb,b)
     bb = b.bishops & b.occupied_co[pl]
-    fill_piece(iplanes,3,bb,b,fwksq)
+    fill_piece(iplanes,3,bb,b)
     bb = b.knights & b.occupied_co[pl]
-    fill_piece(iplanes,4,bb,b,fwksq)
-    bb = b.pawns & b.occupied_co[pl]
-    fill_piece(iplanes,5,bb,b,fwksq)
+    fill_piece(iplanes,4,bb,b)
+    bb = b.pawns   & b.occupied_co[pl]
+    fill_piece(iplanes,5,bb,b)
     #black piece attacks
-    bb = b.kings & b.occupied_co[npl]
-    fill_piece(iplanes,6,bb,b,fwksq)
-    bb = b.queens & b.occupied_co[npl]
-    fill_piece(iplanes,7,bb,b,fwksq)
-    bb = b.rooks & b.occupied_co[npl]
-    fill_piece(iplanes,8,bb,b,fwksq)
+    bb = b.kings   & b.occupied_co[npl]
+    fill_piece(iplanes,6,bb,b)
+    bb = b.queens  & b.occupied_co[npl]
+    fill_piece(iplanes,7,bb,b)
+    bb = b.rooks   & b.occupied_co[npl]
+    fill_piece(iplanes,8,bb,b)
     bb = b.bishops & b.occupied_co[npl]
-    fill_piece(iplanes,9,bb,b,fwksq)
+    fill_piece(iplanes,9,bb,b)
     bb = b.knights & b.occupied_co[npl]
-    fill_piece(iplanes,10,bb,b,fwksq)
-    bb = b.pawns & b.occupied_co[npl]
-    fill_piece(iplanes,11,bb,b,fwksq)
+    fill_piece(iplanes,10,bb,b)
+    bb = b.pawns   & b.occupied_co[npl]
+    fill_piece(iplanes,11,bb,b)
     #piece counts
-    v = chess.popcount(b.queens & b.occupied_co[pl]) - chess.popcount(b.queens & b.occupied_co[npl])
+    v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
     iparams[0] = v
-    v = chess.popcount(b.rooks & b.occupied_co[pl]) - chess.popcount(b.rooks & b.occupied_co[npl])
+    v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
     iparams[1] = v
     v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
     iparams[2] = v
     v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
     iparams[3] = v
-    v = chess.popcount(b.pawns & b.occupied_co[pl]) - chess.popcount(b.pawns & b.occupied_co[npl])
+    v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
     iparams[4] = v
 
 
@@ -310,23 +306,6 @@ class NNet():
                   optimizer=self.opt,
                   metrics=['accuracy'])
 
-    def set_lr(self,args,count):
-        NPOS = args.npos
-        if NPOS == 0:
-            return
-
-        if count <= NPOS/8:
-            args.lr = 0.2
-        elif count <= NPOS/2:
-            args.lr = 0.02
-        elif count <= 3 * NPOS/4:
-            args.lr = 0.002
-        else:
-            args.lr = 0.0002
-
-        for i in range(len(self.cpu_model)):
-            K.set_value(self.model[i].optimizer.lr, args.lr)
-
     def train(self,examples):
         print "Generating input planes using", self.cores, "cores"
         start_t = time.time()
@@ -348,7 +327,7 @@ class NNet():
         ipars = np.asarray(ipars)
         oval = np.asarray(oval)
         opol = np.asarray(opol)
-        oval = np_utils.to_categorical(oval, NVALUE)
+        oval = np_utils.to_categorical(oval, 3)
         if self.pol == 0:
             NPOLICY = 1858
         else:
@@ -391,7 +370,6 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
         examples = []
         start_t = time.time()
         print "Collecting data"
-        myNet.set_lr(args,count)
 
         while True:
 
@@ -416,7 +394,6 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                 examples = []
                 start_t = time.time()
                 print "Collecting data" 
-                myNet.set_lr(args,count)
 
             #break out
             if not line:
@@ -442,7 +419,6 @@ def main(argv):
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
-    parser.add_argument('--npos',dest='npos', required=False, type=int, default=0, help='Number of positions in the training set.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
     parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=Lc0 styel, 1=A0 style')
 
@@ -450,10 +426,8 @@ def main(argv):
     
     myNet = NNet(args)
 
-    global PGN_CHUNK_SIZE
     global EPD_CHUNK_SIZE
-    PGN_CHUNK_SIZE = args.chunk_size
-    EPD_CHUNK_SIZE = PGN_CHUNK_SIZE * 80
+    EPD_CHUNK_SIZE = args.chunk_size * 80
     chunk = args.id
 
     myNet.load_checkpoint("nets","ID-" + str(chunk), args)
