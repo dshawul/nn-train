@@ -92,21 +92,18 @@ V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o [0-9]* | sort -rn | he
 #run selfplay
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
-    taskset $3 time ./scorpio nn_path ${NDIR} new book off sv ${SV} pvstyle 1 selfplay $2 games$1.pgn quit
+    taskset -c $3 time ./scorpio nn_path ${NDIR} new book off sv ${SV} pvstyle 1 selfplay $2 games$1.pgn quit
 }
 
 #use all gpus
 rungames() {
     if [ $GPUS = 0 ]; then
-        M=$((2**CPUS-1))
-        run 0 $1 $M &
+        run 0 $1 0-$CPUS:1 &
     else
         rm -rf nets/*.trt
         I=$((CPUS/GPUS))
-        M=$((2**I-1))
         for k in `seq 0 $((GPUS-1))`; do
-            S=$((k*I))
-            run $k $1 $((M<<S)) &
+            run $k $1 $((k*I))-$((k*I+I-1)):1 &
         done
     fi
     wait
