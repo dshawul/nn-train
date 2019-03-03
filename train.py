@@ -282,6 +282,8 @@ class NNet():
         self.rsav = args.rsav
         self.rsavo = args.rsavo
         self.pol = args.policy
+        self.pol_w = args.pol_w
+        self.val_w = args.val_w
 
     def new_model(self,cid,args):
         if args.gpus > 1:
@@ -303,6 +305,7 @@ class NNet():
             else:
                 self.model.append( self.cpu_model[i] )
             self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
+                  loss_weights = [self.val_w,self.pol_w],
                   optimizer=self.opt,
                   metrics=['accuracy'])
 
@@ -421,6 +424,8 @@ def main(argv):
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
     parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=Lc0 styel, 1=A0 style')
+    parser.add_argument('--pol_w',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
+    parser.add_argument('--val_w',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
 
     args = parser.parse_args()
     
