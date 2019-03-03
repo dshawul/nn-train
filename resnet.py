@@ -14,66 +14,41 @@ from keras.regularizers import l2
 
 CHANNEL_AXIS = 3
 
-def build_a0net(x, blocks,filters, policy):
-    """Build A0 style resnet
-    """
-
-    #Convolution block
-    x = Conv2D(filters=filters, kernel_size=(3,3),
-                      strides=(1,1), padding="same",
-                      kernel_initializer="he_normal",
-                      use_bias=False,
-                      kernel_regularizer=l2(1.e-4))(x)
+def conv_bn(x, filters, size):
+    x = Conv2D(filters=filters, kernel_size=size,
+                  strides=(1,1), padding="same",
+                  use_bias=False,
+                  kernel_initializer="he_normal",
+                  kernel_regularizer=l2(1.e-4))(x)
     x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+    return x
+
+def conv_bn_relu(x, filters, size):
+    x = conv_bn(x, filters, size)
     x = Activation("relu")(x)
+    return x
+
+def build_a0net(x, blocks,filters, policy):
+    #Convolution block
+    x = conv_bn_relu(x,filters,3)
 
     #Residual blocks
     for i in range(blocks-1):
         inp = x
-        x = Conv2D(filters=filters, kernel_size=(3,3),
-                  strides=(1,1), padding="same",
-                  kernel_initializer="he_normal",
-                  use_bias=False,
-                  kernel_regularizer=l2(1.e-4))(x)
-        x = BatchNormalization(axis=CHANNEL_AXIS)(x)
-        x = Activation("relu")(x)
-        x = Conv2D(filters=filters, kernel_size=(3,3),
-                  strides=(1,1), padding="same",
-                  kernel_initializer="he_normal",
-                  use_bias=False,
-                  kernel_regularizer=l2(1.e-4))(x)
-        x = BatchNormalization(axis=CHANNEL_AXIS)(x)
+        x = conv_bn_relu(x,filters,3)
+        x = conv_bn(x,filters,3)
         x = Add()([x,inp])
         x = Activation("relu")(x)
 
     #value head
-    vx = Conv2D(filters=1, kernel_size=(1,1),
-                      strides=(1,1), padding="same",
-                      kernel_initializer="he_normal",
-                      use_bias=False,
-                      kernel_regularizer=l2(1.e-4))(x)
-    vx = BatchNormalization(axis=CHANNEL_AXIS)(vx)
-    vx = Activation("relu")(vx)
+    vx = conv_bn_relu(x,1,1)
 
     #policy head
     if policy == 1:
-        px = Conv2D(filters=filters, kernel_size=(3,3),
-                          strides=(1,1), padding="same",
-                          kernel_initializer="he_normal",
-                          use_bias=False,
-                          kernel_regularizer=l2(1.e-4))(x)
-        px = BatchNormalization(axis=CHANNEL_AXIS)(px)
-        px = Activation("relu")(px)
+        px = conv_bn_relu(x,filters,3)
     else:
-      px = x
-
-    px = Conv2D(filters=73, kernel_size=(1,1),
-                      strides=(1,1), padding="same",
-                      kernel_initializer="he_normal",
-                      use_bias=False,
-                      kernel_regularizer=l2(1.e-4))(px)
-    px = BatchNormalization(axis=CHANNEL_AXIS)(px)
-    px = Activation("relu")(px)
+        px = x
+    px = conv_bn_relu(px,73,1)
 
     return vx,px
 
@@ -86,6 +61,7 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy):
     x = main_input
     y = aux_input
 
+    # body
     vx,px = build_a0net(x, blocks, filters, policy)
 
     # value head
