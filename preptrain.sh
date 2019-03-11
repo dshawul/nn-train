@@ -5,22 +5,35 @@ set -e
 #setup parameters for selfplay
 SC=~/Scorpio   # path to scorpio exec
 NREPLAY=500000 # Number of games in the replay buffer
-NSTEPS=250     # Number of steps
-NGAMES=32000   # Number of games for training network
+NSTEPS=250     # Number of steps of training
+NGAMES=32000   # Number of games for training one network
+EPDDIR=epd     # Directory to store epd files for training
 
 #display help
 display_help() {
-    echo "Usage: $0 [Option...] {file} {strt} " >&2
+    echo "Usage: $0 [Options...] " >&2
     echo
-    echo "   -h     Display this help message."
-    echo " file     File contaiing list of tar files."
-    echo " strt     Start ID of file."
+    echo "   -h                Display this help message."
+    echo "   -d [dir]  {ID}    Source is directory [dir] -- start at file number {ID}."
+    echo "   -w [file] {ID}    Source is [file] containing links to pgn tar files -- start at file number {ID}."
     echo
 }
 
+#options
 if [ "$1" == "-h" ]; then
-  display_help
-  exit 0
+    display_help
+    exit 0
+elif [ "$1" == "-d" ]; then
+    SRCTYPE=0
+    pgns=( `find $2 -type f` )
+elif [ "$1" == "-w" ]; then
+    SRCTYPE=1
+    pgns=( `cat $2` )
+fi
+
+CI=0
+if ! [ -z "$3" ]; then 
+    CI=$3
 fi
 
 #check if Scorpio directory exists
@@ -29,28 +42,26 @@ if [ ! -f ${SC}/scorpio ]; then
     exit 0
 fi
 
-# Prepare training data from tar file pgns
-CI=0
-if ! [ -z "$2" ]; then 
-    CI=$2
-fi
-
-declare -a pgns=( `cat $1` )
-
-get_lczero_games() {
+# get fixed number of games from source
+get_games() {
     T=0
     while true; do
         PGN=${pgns[${CI}]}
-        PGNF=${PGN%%.*}
+        PGNF=pgndir
         if ! [ -e ${PGNF} ]; then
-            wget http://data.lczero.org/files/${PGN}
-            tar -xf ${PGN}
-            rm -rf ${PGN}
+            mkdir ${PGNF}
+            if [ $SRCTYPE -eq 0 ]; then
+                tar -xf ${PGN} -C ${PGNF} --strip-components=1
+            elif [ $SRCTYPE -eq 1 ]; then
+                wget ${PGN} -O xtempx
+                tar -xf xtempx -C ${PGNF} --strip-components=1
+                rm -rf xtempx
+            fi
         else
-            echo 'Skipping download'
+            echo 'Skipping extraction.'
         fi
 
-        P=$((32000-T))
+        P=$((NGAMES-T))
         M=`find ${PGNF} -type f | wc -l`
         if [ $M -lt $P ]; then
             P=$M
@@ -67,25 +78,31 @@ get_lczero_games() {
 
         echo "CI = " $CI
         echo "Games accumulated = " $T
-        if [ $T -ge 32000 ]; then
+        if [ $T -ge $NGAMES ]; then
             break   
         fi
     done
 }
 
+# Prepare training data from tar file pgns
 prepare_train_data() {
     
-    V=`find lcdata/data*.epd -type f | grep -o [0-9]* | sort -rn | head -1`
-    V=$((V+1))
+    if [ -e ${EPDDIR} ]; then
+        V=`find ${EPDDIR}/data*.epd -type f | grep -o [0-9]* | sort -rn | head -1`
+        V=$((V+1))
+    else
+        mkdir ${EPDDIR}
+        V=0
+    fi
 
     while true ; do
         rm -rf cgames.pgn
 
-        get_lczero_games
+        get_games
 
         ${SC}/scorpio pgn_to_epd cgames.pgn nets/data$V.epd quit
 
-        ND=$((NREPLAY/32000))
+        ND=$((NREPLAY/NGAMES))
         if [ $ND -ge $V ]; then
             ND=$V
         else
@@ -99,7 +116,7 @@ prepare_train_data() {
         shuf -n $((NSTEPS * 4096)) nets/temp.epd >x
         mv x nets/temp.epd
 
-        cp nets/temp.epd lcdata/data$V.epd
+        cp nets/temp.epd ${EPDDIR}/data$V.epd
 
         V=$((V+1))
     done

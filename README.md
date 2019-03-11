@@ -67,3 +67,17 @@ To train networks by reinforcement learning issue command
 
 This will train networks (20x256, 12x128, 6x64 and 2x32) using selfplay games produced
 by the 20x256 network. The net used for producing selfplay games is mentioned first
+
+## Preparing training data
+
+If you have a list of tar'ed pgn files in directory, you can issue the below command to prepare
+training data that takes into account replay buffer concept of A0
+
+    ./preptrain.sh -d /path/to/pgn 0
+
+The number 0 indicates the id of the first file -- change this when resuming preparation.
+
+If the files are to be downloaded from the web,such as lc0's http://data.lczero.org/files/, prepare
+a file with a list of links to download the pgn files from, and then issue
+
+    ./preptrain.sh -w files 0

@@ -3,14 +3,17 @@
 set -e
 
 #setup parameters for selfplay
-SC=~/Scorpio  # path to scorpio exec
+SC=../Scorpio  # path to scorpio exec
 SV=800         # mcts simulations
-G=8000         # games per worker
+G=8064         # games per worker
 OPT=1          # Optimizer 0=SGD 1=ADAM
 LR=0.001       # learning rate
 EPOCHS=1       # Number of epochs
 NREPLAY=500000 # Number of games in the replay buffer
 NSTEPS=250     # Number of steps
+CPUCT=150      # Cpuct constant
+POL_TEMP=100   # Policy temeprature
+NOISE_FRAC=25  # Fraction of Dirchilet noise
 
 #display help
 display_help() {
@@ -87,12 +90,13 @@ else
 fi
 
 #start network id
-V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o [0-9]* | sort -rn | head -1`
+V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o ID-[0-9]* | grep -o [0-9]* | sort -rn | head -1`
 
 #run selfplay
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
-    taskset -c $3 time ./scorpio nn_path ${NDIR} new book off sv ${SV} pvstyle 1 selfplay $2 games$1.pgn quit
+    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
+    taskset -c $3 time ./scorpio nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn quit
 }
 
 #use all gpus
@@ -100,7 +104,6 @@ rungames() {
     if [ $GPUS = 0 ]; then
         run 0 $1 0-$CPUS:1 &
     else
-        rm -rf nets/*.trt
         I=$((CPUS/GPUS))
         for k in `seq 0 $((GPUS-1))`; do
             run $k $1 $((k*I))-$((k*I+I-1)):1 &
@@ -133,6 +136,7 @@ conv() {
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
+        rm -rf nets/*.trt
     fi
 }
 
