@@ -284,6 +284,7 @@ class NNet():
         self.pol = args.policy
         self.pol_w = args.pol_w
         self.val_w = args.val_w
+        self.pol_grad = args.pol_grad
 
     def new_model(self,cid,args):
         if args.gpus > 1:
@@ -325,22 +326,31 @@ class NNet():
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
+        if self.pol == 0:
+            NPOLICY = 1858
+        else:
+            NPOLICY = 4672
+
         ipls, ipars, oval, opol = list(zip(*exams))
         ipls = np.asarray(ipls)
         ipars = np.asarray(ipars)
         oval = np.asarray(oval)
         opol = np.asarray(opol)
-        oval = np_utils.to_categorical(oval, 3)
-        if self.pol == 0:
-            NPOLICY = 1858
+
+        vweights = np.ones(oval.size)
+        if self.pol_grad > 0:
+            pweights = (1.0 - oval / 2.0)
         else:
-            NPOLICY = 4672
+            pweights = np.ones(oval.size)
+
         opol = np_utils.to_categorical(opol, NPOLICY)
+        oval = np_utils.to_categorical(oval, 3)
 
         for i in range(len(self.model)):
             print "Fitting model",i
             self.model[i].fit(x = [ipls, ipars], y = [oval, opol],
                   batch_size=self.batch_size,
+                  sample_weight=[vweights, pweights],
                   validation_split=self.vald_split,
                   epochs=self.epochs)
 
@@ -426,6 +436,7 @@ def main(argv):
     parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=Lc0 styel, 1=A0 style')
     parser.add_argument('--pol_w',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
     parser.add_argument('--val_w',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
+    parser.add_argument('--pol_grad',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
 
     args = parser.parse_args()
     

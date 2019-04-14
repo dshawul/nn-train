@@ -14,6 +14,7 @@ NSTEPS=250     # Number of steps
 CPUCT=150      # Cpuct constant
 POL_TEMP=100   # Policy temeprature
 NOISE_FRAC=25  # Fraction of Dirchilet noise
+POL_GRAD=0     # Use policy gradient algo.
 
 #display help
 display_help() {
@@ -90,7 +91,7 @@ else
 fi
 
 #start network id
-V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o ID-[0-9]* | grep -o [0-9]* | sort -rn | head -1`
+V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o [0-9]* | sort -rn | head -1`
 
 #run selfplay
 run() {
@@ -115,7 +116,8 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}
+    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} \
+                    --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_grad ${POL_GRAD}
 }
 
 #move
