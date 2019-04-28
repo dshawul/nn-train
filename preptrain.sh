@@ -88,7 +88,7 @@ get_games() {
 prepare_train_data() {
     
     if [ -e ${EPDDIR} ]; then
-        V=`find ${EPDDIR}/data*.epd -type f | grep -o [0-9]* | sort -rn | head -1`
+        V=`find ${EPDDIR}/data*.epd -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
         V=$((V+1))
     else
         mkdir ${EPDDIR}

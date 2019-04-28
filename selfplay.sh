@@ -5,12 +5,12 @@ set -e
 #setup parameters for selfplay
 SC=../Scorpio  # path to scorpio exec
 SV=800         # mcts simulations
-G=8064         # games per worker
+G=8192         # games per worker
 OPT=1          # Optimizer 0=SGD 1=ADAM
 LR=0.001       # learning rate
 EPOCHS=1       # Number of epochs
 NREPLAY=500000 # Number of games in the replay buffer
-NSTEPS=250     # Number of steps
+NSTEPS=235     # Number of steps
 CPUCT=150      # Cpuct constant
 POL_TEMP=100   # Policy temeprature
 NOISE_FRAC=25  # Fraction of Dirchilet noise
@@ -91,7 +91,7 @@ else
 fi
 
 #start network id
-V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | grep -o [0-9]* | sort -rn | head -1`
+V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
 
 #run selfplay
 run() {
