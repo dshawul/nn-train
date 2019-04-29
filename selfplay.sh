@@ -97,7 +97,7 @@ V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
     SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    taskset -c $3 time ./scorpio nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn quit
+    taskset -c $3 time ./scorpio nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
 }
 
 #use all gpus
@@ -116,7 +116,7 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores ${CPUS} \
+    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS}  \
                     --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_grad ${POL_GRAD}
 }
 
@@ -144,26 +144,24 @@ conv() {
 
 #get selfplay games
 get_selfplay_games() {
+    rm -rf cgames.pgn ctrain.epd
     cd ${SC}
     rungames ${G}
-    rm -rf games.pgn
     cat games*.pgn > cgames.pgn
-    rm -rf games*.pgn
+    cat train*.epd > ctrain.epd
+    rm -rf games*.pgn train*.epd
     cd -
     mv ${SC}/cgames.pgn .
+    mv ${SC}/ctrain.epd .
+    cat cgames.pgn >> nets/allgames.pgn
+    cp ctrain.epd nets/data$V.epd 
 }
 
 #prepare training data
 prepare() {
 
-    rm -rf cgames.pgn
-
     #run games
     get_selfplay_games
-
-    #convert to epd
-    cat cgames.pgn >> nets/allgames.pgn
-    ${SC}/scorpio pgn_to_epd cgames.pgn nets/data$V.epd quit
 
     #prepare shuffled replay buffer
     if [ $GPUS -gt 0 ]; then
