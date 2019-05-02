@@ -31,8 +31,8 @@ if [ "$1" == "-h" ]; then
 fi
 
 #check if Scorpio directory exists
-if [ ! -f ${SC}/scorpio ]; then
-    echo "Please set the correct path to scorpio."
+if [ ! -f ${SC}/${EXE} ]; then
+    echo "Please set the correct path to " ${EXE}
     exit 0
 fi
 
@@ -97,7 +97,7 @@ V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
     SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    taskset -c $3 time ./scorpio nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
+    taskset -c $3 time ./${EXE} nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
 }
 
 #use all gpus

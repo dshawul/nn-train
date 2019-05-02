@@ -1,8 +1,6 @@
 import sys
 import os
 import time
-import chess
-import chess.pgn
 import resnet
 import argparse
 import gzip
@@ -21,126 +19,72 @@ CHANNELS = 24
 NPARMS = 5
 EPD_CHUNK_SIZE = 4096 * 80
 
-def fill_piece(iplanes, ix, bb, b):
-    abb = 0
-    squares = chess.SquareSet(bb)
-    for sq in squares:
-        abb = abb | b.attacks_mask(sq)
-        f = chess.square_file(sq)
-        r = chess.square_rank(sq)
-        iplanes[r,  f,  ix + 12] = 1.0
-
-    squares = chess.SquareSet(abb)
-    for sq in squares:
-        f = chess.square_file(sq)
-        r = chess.square_rank(sq)
-        iplanes[r,  f,  ix] = 1.0
-
-
-def fill_planes(iplanes, iparams, b):
-    pl = chess.WHITE
-    npl = chess.BLACK
-    #white piece attacks
-    bb = b.kings   & b.occupied_co[pl]
-    fill_piece(iplanes,0,bb,b)
-    bb = b.queens  & b.occupied_co[pl]
-    fill_piece(iplanes,1,bb,b)
-    bb = b.rooks   & b.occupied_co[pl]
-    fill_piece(iplanes,2,bb,b)
-    bb = b.bishops & b.occupied_co[pl]
-    fill_piece(iplanes,3,bb,b)
-    bb = b.knights & b.occupied_co[pl]
-    fill_piece(iplanes,4,bb,b)
-    bb = b.pawns   & b.occupied_co[pl]
-    fill_piece(iplanes,5,bb,b)
-    #black piece attacks
-    bb = b.kings   & b.occupied_co[npl]
-    fill_piece(iplanes,6,bb,b)
-    bb = b.queens  & b.occupied_co[npl]
-    fill_piece(iplanes,7,bb,b)
-    bb = b.rooks   & b.occupied_co[npl]
-    fill_piece(iplanes,8,bb,b)
-    bb = b.bishops & b.occupied_co[npl]
-    fill_piece(iplanes,9,bb,b)
-    bb = b.knights & b.occupied_co[npl]
-    fill_piece(iplanes,10,bb,b)
-    bb = b.pawns   & b.occupied_co[npl]
-    fill_piece(iplanes,11,bb,b)
-    #piece counts
-    v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
-    iparams[0] = v
-    v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
-    iparams[1] = v
-    v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
-    iparams[2] = v
-    v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
-    iparams[3] = v
-    v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
-    iparams[4] = v
-
-def decode(line,polt):
-
-    words = line.strip().split()
-    epd = ''
-    for i in range(0, 6):
-        epd = epd + words[i] + ' '
-
-    # parse result
-    svalue = words[6]
-    if svalue == '1-0':
-        result = 0
-    elif svalue == '0-1':
-        result = 2
-    else:
-        result = 1
-
-    # value
-    value = float(words[7])
-
-    # nmoves
-    nmoves = int(words[8])
-
-    # parse move
-    if polt == 0:
-        NPOLICY = 1858
-    else:
-        NPOLICY = 4672
-
-    ipolicy = np.zeros(shape=(NPOLICY,),dtype=np.float32)
-    for i in range( 9, len(words), 2):
-        ipolicy[int(words[i])] = float(words[i+1])
-
-    return epd,result,value,ipolicy
-
 def fill_examples(examples, polt):
 
     exams = []
 
-    bb = chess.Board()
-    for i,p in enumerate(examples):
-        epd,res,val,ipolicy = decode(p, polt)
+    for _,line in enumerate(examples):
 
-        #set board
-        bb.set_epd(epd)
-        
+        words = line.strip().split()
+
+        # player
+        player = int(words[0])
+
+        # result
+        result = int(words[1])
+
+        # value
+        value = float(words[2])
+
         #flip board
-        if bb.turn == chess.BLACK:
-            bb = bb.mirror()
-            res = 2 - res
-            val = 1 - val
+        if player == 1:
+            result = 2 - result
+            value = 1 - value
 
         #result
-        ires = res
+        iresult = result
 
         #value
-        ival = val
+        ivalue = value
+
+        # nmoves
+        nmoves = int(words[3])
+
+        # parse move
+        if polt == 0:
+            NPOLICY = 1858
+        else:
+            NPOLICY = 4672
+
+        ipolicy = np.zeros(shape=(NPOLICY,),dtype=np.float32)
+        for i in range(4, 4+nmoves*2, 2):
+            ipolicy[int(words[i])] = float(words[i+1])
 
         #input planes
-        iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
         iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
-        fill_planes(iplane,iparam,bb)
+        iplane = np.zeros(shape=(8*8*CHANNELS),dtype=np.float32)
         
-        exams.append([iplane,iparam,ires,ival,ipolicy])
+        st=4+nmoves*2
+        for i in range(0, NPARMS):
+            iparam[i] = float(words[st+i])
+
+        st = st + 5
+        v1 = int(words[st])
+        st = st + 1
+        idx = 0
+        for i in range(st, len(words)):
+            l = int(words[i])
+            if v1 > 0:
+                for k in range(0,l):
+                    iplane[idx] = v1
+                    idx = idx + 1
+            else:
+                idx = idx + l
+            v1 = 1 - v1
+
+        iplane = np.reshape(iplane,(8,8,CHANNELS))
+
+        exams.append([iplane,iparam,iresult,ivalue,ipolicy])
 
     return exams
 
