@@ -116,7 +116,7 @@ rungames() {
 
 #train network
 train() {
-    python train.py --epd nets/temp.epd --nets ${net[@]} --gpus ${GPUS}  \
+    python train.py --trn nets/temp.epd --nets ${net[@]} --gpus ${GPUS}  \
                     --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_grad ${POL_GRAD}
 }
 

@@ -1,6 +1,8 @@
 import sys
 import os
 import time
+import chess
+import chess.pgn
 import resnet
 import argparse
 import gzip
@@ -18,37 +20,132 @@ import tensorflow as tf
 CHANNELS = 24
 NPARMS = 5
 EPD_CHUNK_SIZE = 4096 * 80
+USE_EPD = False
+
+def fill_piece(iplanes, ix, bb, b):
+    abb = 0
+    squares = chess.SquareSet(bb)
+    for sq in squares:
+        abb = abb | b.attacks_mask(sq)
+        f = chess.square_file(sq)
+        r = chess.square_rank(sq)
+        iplanes[r,  f,  ix + 12] = 1.0
+
+    squares = chess.SquareSet(abb)
+    for sq in squares:
+        f = chess.square_file(sq)
+        r = chess.square_rank(sq)
+        iplanes[r,  f,  ix] = 1.0
+
+
+def fill_planes(iplanes, iparams, b):
+    pl = chess.WHITE
+    npl = chess.BLACK
+    #white piece attacks
+    bb = b.kings   & b.occupied_co[pl]
+    fill_piece(iplanes,0,bb,b)
+    bb = b.queens  & b.occupied_co[pl]
+    fill_piece(iplanes,1,bb,b)
+    bb = b.rooks   & b.occupied_co[pl]
+    fill_piece(iplanes,2,bb,b)
+    bb = b.bishops & b.occupied_co[pl]
+    fill_piece(iplanes,3,bb,b)
+    bb = b.knights & b.occupied_co[pl]
+    fill_piece(iplanes,4,bb,b)
+    bb = b.pawns   & b.occupied_co[pl]
+    fill_piece(iplanes,5,bb,b)
+    #black piece attacks
+    bb = b.kings   & b.occupied_co[npl]
+    fill_piece(iplanes,6,bb,b)
+    bb = b.queens  & b.occupied_co[npl]
+    fill_piece(iplanes,7,bb,b)
+    bb = b.rooks   & b.occupied_co[npl]
+    fill_piece(iplanes,8,bb,b)
+    bb = b.bishops & b.occupied_co[npl]
+    fill_piece(iplanes,9,bb,b)
+    bb = b.knights & b.occupied_co[npl]
+    fill_piece(iplanes,10,bb,b)
+    bb = b.pawns   & b.occupied_co[npl]
+    fill_piece(iplanes,11,bb,b)
+    #piece counts
+    v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
+    iparams[0] = v
+    v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
+    iparams[1] = v
+    v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
+    iparams[2] = v
+    v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
+    iparams[3] = v
+    v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
+    iparams[4] = v
 
 def fill_examples(examples, polt):
 
+    global USE_EPD
+
     exams = []
+    if USE_EPD:
+        bb = chess.Board()
 
     for _,line in enumerate(examples):
 
         words = line.strip().split()
 
-        # player
-        player = int(words[0])
+        if USE_EPD:
+            epd = ''
+            for i in range(0, 6):
+                epd = epd + words[i] + ' '
 
-        # result
-        result = int(words[1])
+            # parse result
+            svalue = words[6]
+            if svalue == '1-0':
+                result = 0
+            elif svalue == '0-1':
+                result = 2
+            else:
+                result = 1
 
-        # value
-        value = float(words[2])
+            # value
+            value = float(words[7])
 
-        #flip board
-        if player == 1:
-            result = 2 - result
-            value = 1 - value
+            # nmoves
+            nmoves = int(words[8])
+
+            #set board
+            bb.set_epd(epd)
+            
+            #flip board
+            if bb.turn == chess.BLACK:
+                bb = bb.mirror()
+                result = 2 - result
+                value = 1 - value
+
+            offset = 9
+        else:
+            # player
+            player = int(words[0])
+
+            # result
+            result = int(words[1])
+
+            # value
+            value = float(words[2])
+
+            # nmoves
+            nmoves = int(words[3])
+
+            #flip board
+            if player == 1:
+                result = 2 - result
+                value = 1 - value
+
+            offset = 4
 
         #result
         iresult = result
 
         #value
         ivalue = value
-
-        # nmoves
-        nmoves = int(words[3])
 
         # parse move
         if polt == 0:
@@ -57,33 +154,39 @@ def fill_examples(examples, polt):
             NPOLICY = 4672
 
         ipolicy = np.zeros(shape=(NPOLICY,),dtype=np.float32)
-        for i in range(4, 4+nmoves*2, 2):
+        for i in range(offset, offset+nmoves*2, 2):
             ipolicy[int(words[i])] = float(words[i+1])
 
         #input planes
         iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
-        iplane = np.zeros(shape=(8*8*CHANNELS),dtype=np.float32)
+        iplane = None
         
-        st=4+nmoves*2
-        for i in range(0, NPARMS):
-            iparam[i] = float(words[st+i])
+        if USE_EPD:
+            iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
+            fill_planes(iplane,iparam,bb)
+        else:
+            iplane = np.zeros(shape=(8*8*CHANNELS),dtype=np.float32)
+            st=offset+nmoves*2
+            for i in range(0, NPARMS):
+                iparam[i] = float(words[st+i])
 
-        st = st + 5
-        v1 = int(words[st])
-        st = st + 1
-        idx = 0
-        for i in range(st, len(words)):
-            l = int(words[i])
-            if v1 > 0:
-                for k in range(0,l):
-                    iplane[idx] = v1
-                    idx = idx + 1
-            else:
-                idx = idx + l
-            v1 = 1 - v1
+            st = st + 5
+            v1 = int(words[st])
+            st = st + 1
+            idx = 0
+            for i in range(st, len(words)):
+                l = int(words[i])
+                if v1 > 0:
+                    for k in range(0,l):
+                        iplane[idx] = v1
+                        idx = idx + 1
+                else:
+                    idx = idx + l
+                v1 = 1 - v1
 
-        iplane = np.reshape(iplane,(8,8,CHANNELS))
+            iplane = np.reshape(iplane,(8,8,CHANNELS))
 
+        #append
         exams.append([iplane,iparam,iresult,ivalue,ipolicy])
 
     return exams
@@ -243,6 +346,7 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
+    parser.add_argument('--trn','-t', dest='trn', required=False, help='Path to labeled training file')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
@@ -267,6 +371,7 @@ def main(argv):
     
     myNet = NNet(args)
 
+    global USE_EPD
     global EPD_CHUNK_SIZE
     EPD_CHUNK_SIZE = args.chunk_size * 80
     chunk = args.id
@@ -277,9 +382,15 @@ def main(argv):
 
     if args.rand:
         myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
-    elif args.epd != None:
+    elif (args.epd != None) or (args.trn != None):
         start = chunk * EPD_CHUNK_SIZE + 1
-        train_epd(myNet, args, args.epd, args.gzip, start)
+        if args.epd != None:
+            USE_EPD = True
+            train_epd(myNet, args, args.epd, args.gzip, start)
+        else:
+            USE_EPD = False
+            train_epd(myNet, args, args.trn, args.gzip, start)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
