@@ -8,7 +8,7 @@ import argparse
 import gzip
 import numpy as np
 import multiprocessing
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, dump, load
 
 from keras.models import load_model
 from keras import optimizers
@@ -79,15 +79,14 @@ def fill_planes(iplanes, iparams, b):
     v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
     iparams[4] = v
 
-def fill_examples(examples, polt):
+def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
 
     global USE_EPD
 
-    exams = []
     if USE_EPD:
         bb = chess.Board()
 
-    for _,line in enumerate(examples):
+    for id,line in enumerate(examples):
 
         words = line.strip().split()
 
@@ -142,33 +141,21 @@ def fill_examples(examples, polt):
             offset = 4
 
         #result
-        iresult = result
+        oresult[id] = result
 
         #value
-        ivalue = value
+        ovalue[id] = value
 
-        # parse move
-        if polt == 0:
-            NPOLICY = 1858
-        else:
-            NPOLICY = 4672
-
-        ipolicy = np.zeros(shape=(NPOLICY,),dtype=np.float32)
         for i in range(offset, offset+nmoves*2, 2):
-            ipolicy[int(words[i])] = float(words[i+1])
+            opolicy[id, int(words[i])] = float(words[i+1])
 
         #input planes
-        iparam = np.zeros(shape=(NPARMS),dtype=np.float32)
-        iplane = None
-        
         if USE_EPD:
-            iplane = np.zeros(shape=(8,8,CHANNELS),dtype=np.float32)
-            fill_planes(iplane,iparam,bb)
+            fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
         else:
-            iplane = np.zeros(shape=(8*8*CHANNELS),dtype=np.float32)
             st=offset+nmoves*2
             for i in range(0, NPARMS):
-                iparam[i] = float(words[st+i])
+                iparam[id,i] = float(words[st+i])
 
             st = st + 5
             v1 = int(words[st])
@@ -178,18 +165,15 @@ def fill_examples(examples, polt):
                 l = int(words[i])
                 if v1 > 0:
                     for k in range(0,l):
-                        iplane[idx] = v1
+                        rm = idx % (8 * CHANNELS)
+                        r = int(idx // (8 * CHANNELS))
+                        s = int(rm // CHANNELS)
+                        t = rm % CHANNELS
+                        iplane[id,r,s,t] = v1
                         idx = idx + 1
                 else:
                     idx = idx + l
                 v1 = 1 - v1
-
-            iplane = np.reshape(iplane,(8,8,CHANNELS))
-
-        #append
-        exams.append([iplane,iparam,iresult,ivalue,ipolicy])
-
-    return exams
 
 def build_model(cid,policy):
 
@@ -250,25 +234,41 @@ class NNet():
         print "Generating input planes using", self.cores, "cores"
         start_t = time.time()
 
-        nsz = len(examples)
-        nlen = nsz / self.cores
+        N = len(examples)
         
-        res = Parallel(n_jobs=self.cores)(delayed(fill_examples)\
-            ( examples[ (id*nlen) : (min(nsz,(id+1)*nlen)) ], self.pol ) for id in range(self.cores))
-        exams = []
-        for i in range(self.cores):
-            exams = exams + res[i]
+        if self.pol == 0:
+            NPOLICY = 1858
+        else:
+            NPOLICY = 4672
+
+        #memmap
+        folder = './joblib_memmap'
+
+        ipln_memmap = os.path.join(folder, 'ipln_memmap')
+        ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,8,8,CHANNELS),mode='w+')
+
+        ipar_memmap = os.path.join(folder, 'ipar_memmap')
+        ipar = np.memmap(ipar_memmap,dtype=np.float32,shape=(N,NPARMS),mode='w+')
+
+        opol_memmap = os.path.join(folder, 'opol_memmap')
+        opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,NPOLICY),mode='w+')
+
+        ores_memmap = os.path.join(folder, 'ores_memmap')
+        ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
+
+        oval_memmap = os.path.join(folder, 'oval_memmap')
+        oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,),mode='w+')
+
+        #multiprocess
+        nlen = N / self.cores
+        slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(self.cores) ]
+        Parallel(n_jobs=self.cores)( delayed(fill_examples) (                      \
+            examples[sl],ipln[sl,:,:,:],ipar[sl,:],opol[sl,:],ores[sl],oval[sl]    \
+            ) for sl in slices )
 
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
-        ipln, ipar, ores, oval, opol = list(zip(*exams))
-        ipln = np.asarray(ipln)
-        ipar = np.asarray(ipar)
-        ores = np.asarray(ores)
-        oval = np.asarray(oval)
-        opol = np.asarray(opol)
-
         vweights = np.ones(oval.size)
         if self.pol_grad > 0:
             pweights = (1.0 - ores / 2.0) - oval
@@ -383,6 +383,10 @@ def main(argv):
     if args.rand:
         myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
     elif (args.epd != None) or (args.trn != None):
+        folder = './joblib_memmap'
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+
         start = chunk * EPD_CHUNK_SIZE + 1
         if args.epd != None:
             USE_EPD = True
