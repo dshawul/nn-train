@@ -2,29 +2,25 @@ from keras.models import Model
 from keras.layers import (
     Input,
     Activation,
+    Conv2D,
+    BatchNormalization,
     Dense,
     Flatten,
     Add,
     Concatenate,
     Reshape
 )
-from keras.layers.convolutional import Conv2D
-from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
 
 CHANNEL_AXIS = 3
 
-def conv_bn(x, filters, size):
+def conv_bn_relu(x, filters, size):
     x = Conv2D(filters=filters, kernel_size=size,
                   strides=(1,1), padding="same",
                   use_bias=False,
                   kernel_initializer="he_normal",
                   kernel_regularizer=l2(1.e-4))(x)
     x = BatchNormalization(axis=CHANNEL_AXIS)(x)
-    return x
-
-def conv_bn_relu(x, filters, size):
-    x = conv_bn(x, filters, size)
     x = Activation("relu")(x)
     return x
 
@@ -36,9 +32,8 @@ def build_a0net(x, blocks,filters, policy):
     for i in range(blocks-1):
         inp = x
         x = conv_bn_relu(x,filters,3)
-        x = conv_bn(x,filters,3)
+        x = conv_bn_relu(x,filters,3)
         x = Add()([x,inp])
-        x = Activation("relu")(x)
 
     #value head
     vx = conv_bn_relu(x,1,1)

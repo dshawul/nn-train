@@ -12,9 +12,8 @@ from joblib import Parallel, delayed, dump, load
 
 from keras.models import load_model
 from keras import optimizers
-from keras.utils.training_utils import multi_gpu_model
 from keras import backend as K
-from keras.utils import np_utils
+from keras.utils import to_categorical, multi_gpu_model
 import tensorflow as tf
 
 CHANNELS = 24
@@ -275,7 +274,7 @@ class NNet():
         else:
             pweights = np.ones(oval.size)
 
-        oval = np_utils.to_categorical(ores, 3)
+        oval = to_categorical(ores, 3)
 
         for i in range(len(self.model)):
             print "Fitting model",i
