@@ -3,18 +3,31 @@
 set -e
 
 #setup parameters for selfplay
-SC=../Scorpio  # path to scorpio exec
-SV=800         # mcts simulations
-G=8192         # games per worker
-OPT=1          # Optimizer 0=SGD 1=ADAM
-LR=0.001       # learning rate
-EPOCHS=1       # Number of epochs
-NREPLAY=500000 # Number of games in the replay buffer
-NSTEPS=235     # Number of steps
-CPUCT=150      # Cpuct constant
-POL_TEMP=100   # Policy temeprature
-NOISE_FRAC=25  # Fraction of Dirchilet noise
-POL_GRAD=0     # Use policy gradient algo.
+SC=~/Scorpio/bin   # workding directory of engine
+EXE=scorpio.sh     # engine executable
+SV=800             # mcts simulations
+G=8192             # games per worker
+OPT=0              # Optimizer 0=SGD 1=ADAM
+LR=0.01            # learning rate
+EPOCHS=1           # Number of epochs
+NREPLAY=500000     # Number of games in the replay buffer
+NSTEPS=235         # Number of steps
+CPUCT=150          # Cpuct constant
+POL_TEMP=100       # Policy temeprature
+NOISE_FRAC=25      # Fraction of Dirchilet noise
+POL_GRAD=0         # Use policy gradient algo.
+
+#Network parameters
+BOARDX=8
+BOARDY=8
+CHANNELS=24
+POL_STYLE=1
+NPOLICY=4672
+NOAUXINP=
+TRNFLG=--epd
+
+#nets directory
+NETS_DIR=${PWD}/nets
 
 #display help
 display_help() {
@@ -47,20 +60,22 @@ fi
 #initialize network
 init0() {
     echo "Initializing training."
-    rm -rf nets
-    mkdir nets 
-    mkdir nets/hist
+    rm -rf ${NETS_DIR}
+    mkdir ${NETS_DIR}
+    mkdir -p ${NETS_DIR}/hist
 }
 
 init() {
-    python train.py --rand --nets $1
+    python train.py --rand --nets $1 \
+            ${NOAUXINP} --channels ${CHANNELS} --pol ${POL_STYLE} \
+            --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY}
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
-        convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
-        cp nets/ID-0-model-$1.uff nets/hist/ID-0-model-$1.uff
+        convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
+        cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/hist/ID-0-model-$1.uff
     fi
-    cp nets/ID-0-model-$1 nets/hist/ID-0-model-$1
-    cp nets/ID-0-model-$1.pb nets/hist/ID-0-model-$1.pb
+    cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
+    cp ${NETS_DIR}/ID-0-model-$1.pb ${NETS_DIR}/hist/ID-0-model-$1.pb
 }
 
 fornets() {
@@ -77,7 +92,7 @@ if ! [ -z "$3" ]; then net[2]=$3; fi
 if ! [ -z "$4" ]; then net[3]=$4; fi
 if ! [ -z "$5" ]; then net[4]=$5; fi
 
-if ! [ -e nets ]; then
+if ! [ -e ${NETS_DIR} ]; then
     init0
     fornets init
 fi
@@ -85,19 +100,19 @@ fi
 #which net format to use
 Pnet=${net[0]}
 if [ $GPUS -gt 0 ]; then
-    NDIR=$PWD/nets/ID-0-model-${Pnet}.uff
+    NDIR=${NETS_DIR}/ID-0-model-${Pnet}.uff
 else
-    NDIR=$PWD/nets/ID-0-model-${Pnet}.pb
+    NDIR=${NETS_DIR}/ID-0-model-${Pnet}.pb
 fi
 
 #start network id
-V=`find nets/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
+V=`find ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
 
 #run selfplay
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
     SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    taskset -c $3 time ./${EXE} nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
+    taskset -c $3 time ./${EXE} nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
 }
 
 #use all gpus
@@ -116,29 +131,31 @@ rungames() {
 
 #train network
 train() {
-    python train.py --trn nets/temp.epd --nets ${net[@]} --gpus ${GPUS}  \
-                    --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_grad ${POL_GRAD}
+    python train.py ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
+                --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}  \
+                --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} \
+                --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} ${NOAUXINP}
 }
 
 #move
 move() {
-    cp nets/ID-0-model-$1 nets/hist/ID-${V}-model-$1
-    cp nets/ID-0-model-$1.pb nets/hist/ID-${V}-model-$1.pb
+    cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-${V}-model-$1
+    cp ${NETS_DIR}/ID-0-model-$1.pb ${NETS_DIR}/hist/ID-${V}-model-$1.pb
     if [ $GPUS -gt 0 ]; then
-        cp nets/ID-0-model-$1.uff nets/hist/ID-${V}-model-$1.uff
+        cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/hist/ID-${V}-model-$1.uff
     fi
 }
 
 #convert
 conv() {
-    E=`ls -l nets/ID-*-model-$1 | wc -l`
+    E=`ls -l ${NETS_DIR}/ID-*-model-$1 | wc -l`
     E=$((E-1))
-    mv nets/ID-$E-model-$1 nets/ID-0-model-$1
-    rm -rf nets/ID-[1-$E]-model-$1
+    mv ${NETS_DIR}/ID-$E-model-$1 ${NETS_DIR}/ID-0-model-$1
+    rm -rf ${NETS_DIR}/ID-[1-$E]-model-$1
     ./convert.sh ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
-        convert-to-uff nets/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
-        rm -rf nets/*.trt
+        convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
+        rm -rf ${NETS_DIR}/*.trt
     fi
 }
 
@@ -153,8 +170,8 @@ get_selfplay_games() {
     cd -
     mv ${SC}/cgames.pgn .
     mv ${SC}/ctrain.epd .
-    cat cgames.pgn >> nets/allgames.pgn
-    cp ctrain.epd nets/data$V.epd 
+    cat cgames.pgn >> ${NETS_DIR}/allgames.pgn
+    cp ctrain.epd ${NETS_DIR}/data$V.epd 
 }
 
 #prepare training data
@@ -174,13 +191,13 @@ prepare() {
     else
         A=`seq 0 $((V-ND-1))`
         for i in $A; do
-            rm -rf nets/data$i.epd
+            rm -rf ${NETS_DIR}/data$i.epd
         done
     fi
-    cat nets/data*.epd > nets/temp.epd
+    cat ${NETS_DIR}/data*.epd > ${NETS_DIR}/temp.epd
 
-    shuf -n $((NSTEPS * 4096)) nets/temp.epd >x
-    mv x nets/temp.epd
+    shuf -n $((NSTEPS * 4096)) ${NETS_DIR}/temp.epd >x
+    mv x ${NETS_DIR}/temp.epd
 }
 
 #Selfplay training loop

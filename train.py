@@ -16,26 +16,36 @@ from keras import backend as K
 from keras.utils import to_categorical, multi_gpu_model
 import tensorflow as tf
 
+AUX_INP = True
 CHANNELS = 24
+BOARDX = 8
+BOARDY = 8
+NPOLICY = 4672
 NPARMS = 5
 EPD_CHUNK_SIZE = 4096 * 80
 USE_EPD = False
 
 def fill_piece(iplanes, ix, bb, b):
-    abb = 0
-    squares = chess.SquareSet(bb)
-    for sq in squares:
-        abb = abb | b.attacks_mask(sq)
-        f = chess.square_file(sq)
-        r = chess.square_rank(sq)
-        iplanes[r,  f,  ix + 12] = 1.0
+    if AUX_INP:
+        abb = 0
+        squares = chess.SquareSet(bb)
+        for sq in squares:
+            abb = abb | b.attacks_mask(sq)
+            f = chess.square_file(sq)
+            r = chess.square_rank(sq)
+            iplanes[r,  f,  ix + 12] = 1.0
 
-    squares = chess.SquareSet(abb)
-    for sq in squares:
-        f = chess.square_file(sq)
-        r = chess.square_rank(sq)
-        iplanes[r,  f,  ix] = 1.0
-
+        squares = chess.SquareSet(abb)
+        for sq in squares:
+            f = chess.square_file(sq)
+            r = chess.square_rank(sq)
+            iplanes[r,  f,  ix] = 1.0
+    else:
+        squares = chess.SquareSet(bb)
+        for sq in squares:
+            f = chess.square_file(sq)
+            r = chess.square_rank(sq)
+            iplanes[r,  f,  ix] = 1.0
 
 def fill_planes(iplanes, iparams, b):
     pl = chess.WHITE
@@ -66,22 +76,21 @@ def fill_planes(iplanes, iparams, b):
     fill_piece(iplanes,10,bb,b)
     bb = b.pawns   & b.occupied_co[npl]
     fill_piece(iplanes,11,bb,b)
+
     #piece counts
-    v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
-    iparams[0] = v
-    v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
-    iparams[1] = v
-    v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
-    iparams[2] = v
-    v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
-    iparams[3] = v
-    v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
-    iparams[4] = v
+    if AUX_INP:
+        v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
+        iparams[0] = v
+        v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
+        iparams[1] = v
+        v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
+        iparams[2] = v
+        v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
+        iparams[3] = v
+        v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
+        iparams[4] = v
 
 def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
-
-    global USE_EPD
-
     if USE_EPD:
         bb = chess.Board()
 
@@ -153,10 +162,12 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
             fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
         else:
             st=offset+nmoves*2
-            for i in range(0, NPARMS):
-                iparam[id,i] = float(words[st+i])
 
-            st = st + 5
+            if AUX_INP:
+                for i in range(0, NPARMS):
+                    iparam[id,i] = float(words[st+i])
+                st = st + 5
+
             v1 = int(words[st])
             st = st + 1
             idx = 0
@@ -175,17 +186,21 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
                 v1 = 1 - v1
 
 def build_model(cid,policy):
+    if AUX_INP:
+        auxinp = True
+    else:
+        auxinp = False
 
     if cid == 0:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  2,  32, policy)
+        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,),  2,  32, policy, NPOLICY, auxinp)
     elif cid == 1:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,),  6,  64, policy)
+        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,),  6,  64, policy, NPOLICY, auxinp)
     elif cid == 2:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 12, 128, policy)
+        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 12, 128, policy, NPOLICY, auxinp)
     elif cid == 3:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 20, 256, policy)
+        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 20, 256, policy, NPOLICY, auxinp)
     elif cid == 4:
-        return resnet.build_net((8, 8, CHANNELS), (NPARMS,), 40, 256, policy)
+        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 40, 256, policy, NPOLICY, auxinp)
     else:
         print "Unsupported network id (Use 0 to 4)."
         sys.exit()
@@ -200,7 +215,6 @@ class NNet():
         self.nets = args.nets
         self.rsav = args.rsav
         self.rsavo = args.rsavo
-        self.pol = args.policy
         self.pol_w = args.pol_w
         self.val_w = args.val_w
         self.pol_grad = args.pol_grad
@@ -234,17 +248,12 @@ class NNet():
         start_t = time.time()
 
         N = len(examples)
-        
-        if self.pol == 0:
-            NPOLICY = 1858
-        else:
-            NPOLICY = 4672
 
         #memmap
         folder = './joblib_memmap'
 
         ipln_memmap = os.path.join(folder, 'ipln_memmap')
-        ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,8,8,CHANNELS),mode='w+')
+        ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
 
         ipar_memmap = os.path.join(folder, 'ipar_memmap')
         ipar = np.memmap(ipar_memmap,dtype=np.float32,shape=(N,NPARMS),mode='w+')
@@ -278,7 +287,11 @@ class NNet():
 
         for i in range(len(self.model)):
             print "Fitting model",i
-            self.model[i].fit(x = [ipln, ipar], y = [oval, opol],
+            if AUX_INP:
+                xi = [ipln,ipar]
+            else:
+                xi = [ipln]
+            self.model[i].fit(x = xi, y = [oval, opol],
                   batch_size=self.batch_size,
                   sample_weight=[vweights, pweights],
                   validation_split=self.vald_split,
@@ -343,15 +356,23 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             examples.append(line)
 
 def main(argv):
+    global USE_EPD
+    global AUX_INP
+    global EPD_CHUNK_SIZE
+    global CHANNELS
+    global BOARDX
+    global BOARDY
+    global NPOLICY
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
     parser.add_argument('--trn','-t', dest='trn', required=False, help='Path to labeled training file')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
-    parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.001, help='Training learning rate.')
+    parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
     parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.0, help='Fraction of sample to use for validation.')
-    parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=4096, help='PGN chunk size.')
+    parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=(EPD_CHUNK_SIZE//80), help='PGN chunk size.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
@@ -360,19 +381,28 @@ def main(argv):
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
-    parser.add_argument('--opt',dest='opt', required=False, type=int, default=1, help='Optimizer 0=SGD 1=Adam.')
-    parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=Lc0 styel, 1=A0 style')
+    parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam.')
+    parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=simple, 1=A0 style')
     parser.add_argument('--pol_w',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
     parser.add_argument('--val_w',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
     parser.add_argument('--pol_grad',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
+    parser.add_argument('--noauxinp','-u',dest='noauxinp', required=False, action='store_false', help='Don\'t use auxillary input')
+    parser.add_argument('--channels','-c', dest='channels', required=False, type=int, default=CHANNELS, help='number of input channels of network.')
+    parser.add_argument('--boardx','-x', dest='boardx', required=False, type=int, default=BOARDX, help='board x-dimension.')
+    parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
+    parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
 
     args = parser.parse_args()
     
     myNet = NNet(args)
 
-    global USE_EPD
-    global EPD_CHUNK_SIZE
     EPD_CHUNK_SIZE = args.chunk_size * 80
+    CHANNELS = args.channels
+    BOARDX = args.boardx
+    BOARDY = args.boardy
+    NPOLICY = args.npolicy
+    AUX_INP = args.noauxinp
+
     chunk = args.id
 
     myNet.load_checkpoint("nets","ID-" + str(chunk), args)
