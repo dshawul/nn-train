@@ -2,11 +2,17 @@
 
 set -e
 
+#set working directory and executable
+SC=nn-dist/Scorpio-train/bin/Linux
+EXE=scorpio.sh
+
+#server options
+DIST=0
+REFRESH=1m
+
 #setup parameters for selfplay
-SC=~/Scorpio/bin   # workding directory of engine
-EXE=scorpio.sh     # engine executable
 SV=800             # mcts simulations
-G=8192             # games per worker
+G=32768            # games per net
 OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.01            # learning rate
 EPOCHS=1           # Number of epochs
@@ -29,6 +35,9 @@ TRNFLG=--epd
 #nets directory
 NETS_DIR=${PWD}/nets
 
+#kill background processes on exit
+trap 'kill $(jobs -p)' EXIT
+
 #display help
 display_help() {
     echo "Usage: $0 [Option...] {IDs} " >&2
@@ -41,12 +50,6 @@ display_help() {
 if [ "$1" == "-h" ]; then
   display_help
   exit 0
-fi
-
-#check if Scorpio directory exists
-if [ ! -f ${SC}/${EXE} ]; then
-    echo "Please set the correct path to " ${EXE}
-    exit 0
 fi
 
 #number of cpus and gpus
@@ -63,13 +66,21 @@ init0() {
     rm -rf ${NETS_DIR}
     mkdir ${NETS_DIR}
     mkdir -p ${NETS_DIR}/hist
+    mkdir -p ${NETS_DIR}/games
+    mkdir -p ${NETS_DIR}/train
+}
+
+#convert to pb
+convert-to-pb() {
+    python src/k2tf_convert.py -m ${NETS_DIR}/$1 \
+           --name $1.pb --prefix 'value' -n 2 -o ${NETS_DIR}
 }
 
 init() {
-    python train.py --rand --nets $1 \
+    python src/train.py --rand --nets $1 \
             ${NOAUXINP} --channels ${CHANNELS} --pol ${POL_STYLE} \
             --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY}
-    ./convert.sh ID-0-model-$1
+    convert-to-pb ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
         cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/hist/ID-0-model-$1.uff
@@ -106,13 +117,39 @@ else
 fi
 
 #start network id
-V=`find ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb -type f | sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
+V=`find ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb -type f | \
+    sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
+
+#start server
+send_server() {
+   echo $@ > servinp
+}
+
+if [ $DIST -ge 1 ]; then
+   echo "Starting server"
+   if [ ! -p servinp ]; then
+       mkfifo servinp
+   fi
+   tail -f servinp | java -cp nn-dist/bin ConsoleInterface -debug -startServer &
+   sleep 5s
+   send_server parameters ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC}
+   send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff
+   send_server network-pb ${NETS_DIR}/ID-0-model-${Pnet}.pb
+   echo "Finished starting server"
+else
+   if [ ! -f ${SC}/${EXE} ]; then
+       echo "Please set the correct path to " ${EXE}
+       exit 0
+   fi
+fi
 
 #run selfplay
 run() {
     export CUDA_VISIBLE_DEVICES="$1" 
-    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    taskset -c $3 time ./${EXE} nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
+    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
+           policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
+    taskset -c $3 time ./${EXE} nn_type 0 nn_path ${NDIR} new ${SCOPT} \
+            sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
 }
 
 #use all gpus
@@ -121,8 +158,9 @@ rungames() {
         run 0 $1 0-$CPUS:1 &
     else
         I=$((CPUS/GPUS))
+        GW=$((G/GPUS))
         for k in `seq 0 $((GPUS-1))`; do
-            run $k $1 $((k*I))-$((k*I+I-1)):1 &
+            run $k $GW $((k*I))-$((k*I+I-1)):1 &
         done
     fi
     wait
@@ -131,8 +169,8 @@ rungames() {
 
 #train network
 train() {
-    python train.py ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
-                --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}  \
+    python src/train.py ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
+                --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}  \
                 --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} \
                 --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} ${NOAUXINP}
 }
@@ -152,11 +190,20 @@ conv() {
     E=$((E-1))
     mv ${NETS_DIR}/ID-$E-model-$1 ${NETS_DIR}/ID-0-model-$1
     rm -rf ${NETS_DIR}/ID-[1-$E]-model-$1
-    ./convert.sh ID-0-model-$1
+    convert-to-pb ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
         rm -rf ${NETS_DIR}/*.trt
     fi
+}
+
+#backup data
+backup_data() {
+    mv cgames.pgn ${NETS_DIR}/games/games$V.pgn
+    gzip -f ${NETS_DIR}/games/games$V.pgn
+    mv ctrain.epd ${NETS_DIR}/train/train$V.epd
+    cp ${NETS_DIR}/train/train$V.epd ${NETS_DIR}/data$V.epd 
+    gzip -f ${NETS_DIR}/train/train$V.epd
 }
 
 #get selfplay games
@@ -170,15 +217,38 @@ get_selfplay_games() {
     cd -
     mv ${SC}/cgames.pgn .
     mv ${SC}/ctrain.epd .
-    cat cgames.pgn >> ${NETS_DIR}/allgames.pgn
-    cp ctrain.epd ${NETS_DIR}/data$V.epd 
+    backup_data
+}
+
+#get games from file
+get_file_games() {
+    while true; do
+        sleep ${REFRESH}
+        if [ -f ./ctrain.epd ]; then
+            LN=`cat ctrain.epd | wc -l`
+        else
+            LN=0
+        fi
+        echo 'Accumulated games: ' $((LN/80)) of $G
+        if [ $LN -ge $((G * 80)) ]; then
+            echo 'Training new net'
+            echo '----------------'
+            backup_data
+            return
+        fi    
+    done
 }
 
 #prepare training data
 prepare() {
-
+    
     #run games
-    get_selfplay_games
+    if [ $DIST -ge 1 ]; then
+        send_server update-network
+        get_file_games
+    else
+        get_selfplay_games
+    fi
 
     #prepare shuffled replay buffer
     if [ $GPUS -gt 0 ]; then

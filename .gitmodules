@@ -1,0 +1,3 @@
+[submodule "nn-dist"]
+	path = nn-dist
+	url = https://github.com/dshawul/nn-dist.git
