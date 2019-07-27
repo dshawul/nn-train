@@ -77,7 +77,7 @@ convert-to-pb() {
 }
 
 init() {
-    python src/train.py --rand --nets $1 \
+    python src/train.py --rand --dir ${NETS_DIR} --nets $1 \
             ${NOAUXINP} --channels ${CHANNELS} --pol ${POL_STYLE} \
             --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY}
     convert-to-pb ID-0-model-$1
@@ -169,7 +169,7 @@ rungames() {
 
 #train network
 train() {
-    python src/train.py ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
+    python src/train.py --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
                 --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}  \
                 --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} \
                 --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} ${NOAUXINP}

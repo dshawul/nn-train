@@ -340,9 +340,9 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                 print "Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr
                 myNet.train(examples)
                 if chunk % myNet.rsavo == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, True)
+                    myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, True)
                 elif chunk % myNet.rsav == 0:
-                    myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
+                    myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, False)
 
                 examples = []
                 start_t = time.time()
@@ -367,6 +367,7 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
     parser.add_argument('--trn','-t', dest='trn', required=False, help='Path to labeled training file')
+    parser.add_argument('--dir', dest='dir', required=False, default="nets", help='Path to network files')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
@@ -405,12 +406,12 @@ def main(argv):
 
     chunk = args.id
 
-    myNet.load_checkpoint("nets","ID-" + str(chunk), args)
+    myNet.load_checkpoint(args.dir,"ID-" + str(chunk), args)
 
     myNet.compile_model(args)
 
     if args.rand:
-        myNet.save_checkpoint("nets","ID-" + str(chunk), args, False)
+        myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, False)
     elif (args.epd != None) or (args.trn != None):
         folder = './joblib_memmap'
         if not os.path.isdir(folder):
