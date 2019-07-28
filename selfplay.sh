@@ -3,8 +3,11 @@
 set -e
 
 #set working directory and executable
-SC=nn-dist/Scorpio-train/bin/Linux
+SC=${PWD}/nn-dist/Scorpio-train/bin/Linux
 EXE=scorpio.sh
+
+#cutechess-cli for making matches
+CUTECHESS=~/cutechess-cli
 
 #server options
 DIST=0
@@ -37,20 +40,21 @@ WORK_ID=1
 NETS_DIR=${PWD}/nets-${WORK_ID}
 
 #kill background processes on exit
-trap 'kill $(jobs -p)' EXIT
+trap 'kill $(jobs -p)' EXIT INT
 
 #display help
 display_help() {
     echo "Usage: $0 [Option...] {IDs} " >&2
     echo
-    echo "   -h     Display this help message."
-    echo "   IDs    Network IDs to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
+    echo "   IDs           Network IDs to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
+    echo "   -h,--help     Display this help message."
+    echo "   -m,--match    Conduct matches for evaluating networks."
     echo
 }
 
-if [ "$1" == "-h" ]; then
-  display_help
-  exit 0
+if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    display_help
+    exit 0
 fi
 
 #number of cpus and gpus
@@ -61,6 +65,43 @@ else
     GPUS=0
 fi
 
+#conduct matches
+conduct_match() {
+    MT=`ls -l ${NETS_DIR}/matches | wc -l`
+    MT=$((MT-1))
+
+    MH=`find ${NETS_DIR}/hist/ID-*-model-$1.pb -type f | \
+      sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
+
+    if [ $GPUS -gt 0 ]; then
+       ND1=${NETS_DIR}/hist/ID-$((MT+1))-model-$1.uff
+       ND2=${NETS_DIR}/hist/ID-$MT-model-$1.uff
+    else
+       ND1=${NETS_DIR}/hist/ID-$((MT+1))-model-$1.pb
+       ND2=${NETS_DIR}/hist/ID-$MT-model-$1.pb
+    fi
+
+    if [ ! -f "$ND1" ] || [ ! -f "$ND2" ]; then
+       exit 0
+    fi
+
+    cd $CUTECHESS
+    rm -rf match.pgn
+    ./cutechess-cli -concurrency 1 \
+        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard arg="sv ${SV} nn_type 0 nn_path ${ND1}" name=scorpio-$((MT+1)) \
+        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard arg="sv ${SV} nn_type 0 nn_path ${ND2}" name=scorpio-$MT       \
+        -each tc=40/30000 -rounds 200 -pgnout match.pgn -repeat
+    cd -
+
+    mv ${CUTECHESS}/match.pgn ${NETS_DIR}/matches/match${MT}.pgn
+}
+
+if [ "$2" == "-m" ] || [ "$2" == "--match" ]; then
+    while true; do
+    	conduct_match $1
+    done
+fi
+
 #initialize network
 init0() {
     echo "Initializing training."
@@ -69,6 +110,7 @@ init0() {
     mkdir -p ${NETS_DIR}/hist
     mkdir -p ${NETS_DIR}/games
     mkdir -p ${NETS_DIR}/train
+    mkdir -p ${NETS_DIR}/matches
 }
 
 #convert to pb
@@ -118,8 +160,8 @@ else
 fi
 
 #start network id
-V=`find ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb -type f | \
-    sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
+V=`ls -l ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb | wc -l`
+V=$((V-1))
 
 #start server
 send_server() {
@@ -225,13 +267,13 @@ get_selfplay_games() {
 get_file_games() {
     while true; do
         sleep ${REFRESH}
-        if [ -f ./ctrain.epd ]; then
-            LN=`cat ctrain.epd | wc -l`
+        if [ -f ./cgames.pgn ]; then
+            LN=`grep "Result" cgames.pgn | wc -l`
         else
             LN=0
         fi
-        echo 'Accumulated games: ' $((LN/80)) of $G
-        if [ $LN -ge $((G * 80)) ]; then
+        echo 'Accumulated games: ' $LN of $G
+        if [ $LN -ge $G ]; then
             echo 'Training new net'
             echo '----------------'
             backup_data
