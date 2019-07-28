@@ -130,7 +130,7 @@ if [ $DIST -ge 1 ]; then
    if [ ! -p servinp ]; then
        mkfifo servinp
    fi
-   tail -f servinp | java -cp nn-dist/bin ConsoleInterface -debug -startServer &
+   tail -f servinp | nn-dist/server.sh &
    sleep 5s
    send_server parameters ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC}
    send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff
