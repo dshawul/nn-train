@@ -33,7 +33,8 @@ NOAUXINP=
 TRNFLG=--epd
 
 #nets directory
-NETS_DIR=${PWD}/nets
+WORK_ID=1
+NETS_DIR=${PWD}/nets-${WORK_ID}
 
 #kill background processes on exit
 trap 'kill $(jobs -p)' EXIT
@@ -132,7 +133,7 @@ if [ $DIST -ge 1 ]; then
    fi
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
-   send_server parameters ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC}
+   send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC}
    send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff
    send_server network-pb ${NETS_DIR}/ID-0-model-${Pnet}.pb
    echo "Finished starting server"
