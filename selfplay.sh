@@ -6,8 +6,9 @@ set -e
 SC=${PWD}/nn-dist/Scorpio-train/bin/Linux
 EXE=scorpio.sh
 
-#cutechess-cli for making matches
+#location of some external tools
 CUTECHESS=~/cutechess-cli
+BOPO=~/bopo
 
 #server options
 DIST=0
@@ -49,11 +50,32 @@ display_help() {
     echo "   IDs           Network IDs to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
     echo "   -h,--help     Display this help message."
     echo "   -m,--match    Conduct matches for evaluating networks."
+    echo "   -e,--elo      Calculate elos of networks."
     echo
 }
 
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     display_help
+    exit 0
+fi
+
+#calcuate elos of matches
+calculate_elo() {
+   cat ${NETS_DIR}/matches/*.pgn > games.pgn
+   (${BOPO}/bopo <<ENDM
+      read games.pgn
+      mm
+      ratings
+ENDM
+   ) | grep scorpio | sed 's/scorpio/ID/g' > ${NETS_DIR}/ratings.txt
+
+   cat ${NETS_DIR}/ratings.txt | sed 's/ID-//g' | \
+	   awk '{ print $2 " " $3 }' | sort -n | \
+	   awk -v G=$G '{ print "x: "G*$1 ", y: "$2 }' > ${NETS_DIR}/pltdata
+}
+
+if [ "$1" == "-e" ] || [ "$1" == "--elo" ]; then
+    calculate_elo
     exit 0
 fi
 
@@ -88,9 +110,11 @@ conduct_match() {
     cd $CUTECHESS
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
-        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard arg="sv ${SV} nn_type 0 nn_path ${ND1}" name=scorpio-$((MT+1)) \
-        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard arg="sv ${SV} nn_type 0 nn_path ${ND2}" name=scorpio-$MT       \
-        -each tc=40/30000 -rounds 200 -pgnout match.pgn -repeat
+        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
+		arg="sv ${SV} nn_type 0 nn_path ${ND1}" name=scorpio-$((MT+1)) \
+        -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
+		arg="sv ${SV} nn_type 0 nn_path ${ND2}" name=scorpio-$MT       \
+        -each tc=40/30000 -rounds 100 -pgnout match.pgn -repeat
     cd -
 
     mv ${CUTECHESS}/match.pgn ${NETS_DIR}/matches/match${MT}.pgn
@@ -99,7 +123,9 @@ conduct_match() {
 if [ "$2" == "-m" ] || [ "$2" == "--match" ]; then
     while true; do
     	conduct_match $1
+	calculate_elo
     done
+    exit 0
 fi
 
 #initialize network
