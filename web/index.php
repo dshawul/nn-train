@@ -1,49 +1,10 @@
 <!DOCTYPE HTML>
 <html>
+
 <head>  
-<script>
-window.onload = function () {
-
-var chart = new CanvasJS.Chart("chartContainer", {
-	animationEnabled: true,
-	theme: "light2",
-	axisX:{
- 	        title: "Total games",
-		titleFontWeight: "bold",
-		titleFontSize: 15,
-		gridDashType: "dot",
-		gridThickness: 2
- 	},
-        axisY:{
-		title: "ELO",
-		titleFontWeight: "bold",
-		titleFontSize: 15,
-		includeZero: true
-	},
-	data: [{        
-		type: "line",       
-		lineColor: "red",
-		dataPoints: [
-
-<?php
-$file = fopen("scorpiozero/nets-1/pltdata","r");
-
-while(! feof($file))
-  {
-  echo "{ ".fgets($file)." },";
-  }
-
-fclose($file);
-?>
-
-		]
-	}]
-});
-chart.render();
-
-}
-</script>
+<link rel="stylesheet" type="text/css" href="mystyle.css">
 </head>
+
 <body>
 
 <header>
@@ -55,12 +16,16 @@ chart.render();
 Welcome to the ScorpioZero training server. <br>
 </p>
 
+<?php
+include "common.php";
+?>
+
 <p>
 <a href="http://scorpiozero.ddns.net/users.php">List of users</a> <br>
 <a href="http://scorpiozero.ddns.net/contrib.php">Contributions of users</a> <br>
 <a href="http://scorpiozero.ddns.net/work.php">Active training runs</a> <br>
-<a href="http://scorpiozero.ddns.net/scorpiozero">Networks, training games and data, matches etc</a> <br>
-<a href="http://scorpiozero.ddns.net/matches.php">View matches between networks</a> <br>
+<a href="http://scorpiozero.ddns.net/scorpiozero">Download networks and training data</a> <br>
+<a href=<?php echo "http://scorpiozero.ddns.net/matches.php?runid=".$NET; ?> >View matches between networks</a> <br>
 </p>
 
 <p>
@@ -77,82 +42,132 @@ Discussion. <br>
 
 <a href="https://groups.google.com/forum/#!forum/scorpiozero">Discussion forum</a> <br>
 
+<p>
+Select test run to display <br>
+</p>
+
+<select name="run" id="runid" onchange="window.location='index.php?runid=' + this.value;">
+<?php
+$dir = "scorpiozero/";
+$files = array_diff(scandir($dir), array('.', '..'));
+$files = array_reverse($files);
+foreach( $files as $i=>$f ) {
+   if( $NET == "$dir$f" ) {
+   	echo "\t<option value=$dir$f selected>Training run $f</option>\n";
+   } else {
+   	echo "\t<option value=$dir$f>Training run $f</option>\n";
+   }
+}
+?>
+</select>
+
 </nav>
 
 <article>
-<div id="chartContainer" style="height: 570px; width: 870px;"></div>
+<div id="chartContainer"></div>
 </article>
 
+<nav>
+<p>
+Latest run still with 2x32 net and 512 games per net
+with a sliding window of  15 nets. <br>
+</p>
+
+<p>
+Also initial learning rate is 0.15 as opposed to 0.01 in run 1.
+The previous net had problems capturing peice values even until 600k games. <br>
+</p>
+</nav>
+
 <footer>
-<p>--</p>
+<p>..</p>
 </footer>
 
 <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
 
-<style>
-* {
-  box-sizing: border-box;
-}
+<script>
+window.onload = function () {
+var chart = new CanvasJS.Chart("chartContainer", {
+	animationEnabled: true,
+	zoomEnabled: true,
+	height: 600,
+	theme: "dark1",
+	axisX:{
+ 	        title: "Total games (K)",
+		titleFontWeight: "bold",
+		titleFontSize: 15,
+		gridDashType: "dot",
+		gridThickness: 2
+ 	},
+        axisY:{
+		title: "ELO",
+		titleFontWeight: "bold",
+		titleFontSize: 15,
+		includeZero: true
+	},
+	toolTip: {
+		shared: true
+	},
+	legend: {
+		dockInsidePlotArea: true,
+		cursor: "pointer",
+		itemclick: toggleDataSeries
+	},
+	data: [{
+		type: "rangeArea",
+		markerSize: 0,
+		name: "Strength",
+		showInLegend: true,
+		toolTipContent: "{x}<br><span style=\"color:#6D77AC\">{name}</span><br>Min: {y[1]} elo<br>Max: {y[0]} elo",
+		dataPoints: [
+<?php
+$file = fopen("$NET/pltdata","r");
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-/* Style the header */
-header {
-  height: 5%;
-  padding: 5px;
-  background-color: #000;
-  text-align: center;
-  font-size: 15px;
-  color: white;
-}
-
-/* Create two columns/boxes that floats next to each other */
-nav {
-  float: left;
-  width: 25%;
-  height: 654px;
-  background: #ccc;
-  padding: 20px;
-}
-
-/* Style the list inside the menu */
-nav ul {
-  list-style-type: none;
-  padding: 0;
-}
-
-article {
-  float: left;
-  padding: 20px;
-  width: 75%;
-  background-color: #f1f1f1;
-  height: 100%; /* only for demonstration, should be removed */
-}
-
-/* Clear floats after the columns */
-section:after {
-  content: "";
-  display: table;
-  clear: both;
-}
-
-/* Style the footer */
-footer {
-  background-color: #ccc;
-  padding: 10px;
-  text-align: center;
-  color: white;
-}
-
-/* Responsive layout - makes the two columns/boxes stack on top of each other instead of next to each other, on small screens */
-@media (max-width: 600px) {
-  nav, article {
-    width: 100%;
-    height: auto;
+while(! feof($file))
+  {
+  echo fgets($file);
   }
+
+fclose($file);
+?>
+		]
+	}]
+});
+chart.render();
+
+addAverages();
+
+function addAverages() {
+	var dps = [];
+	for(var i = 0; i < chart.options.data[0].dataPoints.length; i++) {
+		dps.push({
+			x: chart.options.data[0].dataPoints[i].x,
+			y: (chart.options.data[0].dataPoints[i].y[0] + chart.options.data[0].dataPoints[i].y[1]) / 2
+		});
+	}
+	chart.options.data.push({
+		type: "line",
+		name: "Average",
+		showInLegend: true,
+		markerType: "triangle",
+		markerSize: 0,
+		yValueFormatString: "##.0 elo",
+		dataPoints: dps
+	});
+	chart.render();
 }
-</style>
+
+function toggleDataSeries(e) {
+	if (typeof (e.dataSeries.visible) === "undefined" || e.dataSeries.visible) {
+		e.dataSeries.visible = false;
+	} else {
+		e.dataSeries.visible = true;
+	}
+	e.chart.render();
+}
+
+}
+</script>
+
 </body>
 </html>

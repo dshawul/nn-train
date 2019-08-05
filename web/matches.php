@@ -1,9 +1,11 @@
 <html>
+
 <body>
 <h2>Netowrk evaluation matches</h2>
 
 <?php
-$dir = "scorpiozero/nets-1/matches/";
+include "common.php";
+$dir = "$NET/matches/";
 $files = array_diff(scandir($dir), array('.', '..'));
 
 echo "<table style='border: solid 2px blue;'>\n";
