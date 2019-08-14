@@ -12,16 +12,16 @@ BAYESELO=~/BayesElo/bayeselo
 
 #server options
 DIST=0
-REFRESH=1m
+REFRESH=20s
 
 #setup parameters for selfplay
-SV=800             # mcts simulations
-G=512              # games per net
+SV=1               # mcts simulations
+G=16384            # train net after this number of games
 OPT=0              # Optimizer 0=SGD 1=ADAM
-LR=0.15            # learning rate
+LR=0.02            # learning rate
 EPOCHS=1           # Number of epochs
-NREPLAY=$((15*G))  # Number of games in the replay buffer
-NSTEPS=8           # Number of steps
+NREPLAY=$((32*G))  # Number of games in the replay buffer
+NSTEPS=256         # Number of steps
 CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
@@ -38,7 +38,7 @@ TRNFLG=--epd
 BATCH_SIZE=4096
 
 #nets directory
-WORK_ID=1
+WORK_ID=6
 NETS_DIR=${PWD}/nets-${WORK_ID}
 
 #kill background processes on exit
@@ -47,7 +47,7 @@ trap 'kill $(jobs -p)' EXIT INT
 #number of cpus and gpus
 CPUS=`grep -c ^processor /proc/cpuinfo`
 if [ ! -z `which nvidia-smi` ]; then
-    GPUS=`nvidia-smi | grep "N/A" | wc -l`
+    GPUS=`nvidia-smi --query-gpu=name --format=csv,noheader | wc -l`
 else
     GPUS=0
 fi
@@ -60,7 +60,8 @@ display_help() {
     echo
     echo "   IDs           Network IDs to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
     echo "   -h,--help     Display this help message."
-    echo "   -m,--match    Conduct matches for evaluating networks."
+    echo "   -m,--match    Conduct matches for evaluating networks. e.g. --match 0 200 201"
+    echo "                 match 2x32 nets ID 200 and 201"
     echo "   -e,--elo      Calculate elos of networks."
     echo
 }
@@ -86,7 +87,7 @@ ENDM
 
    cat ${NETS_DIR}/ratings.txt | sed 's/ID-//g' | \
 	   awk '{ print $2 " " $3 " " $4 " " $5 }' | sort -rn | \
-	   awk -v G=$((G/512)) '{ print "{ x: "(G*$1)/2", y: ["$2+$3", "$2-$3"] }," }' \
+	   awk -v G=$((G/1024)) '{ print "{ x: "G*$1", y: ["$2+$3", "$2-$3"] }," }' \
 	   > ${NETS_DIR}/pltdata
 }
 
@@ -98,34 +99,16 @@ fi
 ###################
 #conduct matches
 ###################
-anchors=(0 3 8 15 24 35 48 63 80 99 120 143 167 195   \
-	 224 255 288 323 360 399 440 483 528 576 624  \
-	 675 728 783 840 899 960 1023 1088 1155 12254 \
-	 1295 1368 1443 1520 1599 1680 1763 1848 1935 \
-	 2024 2115 2208 2303 2400 2499 2600 2703 2808 \
-	 2915 3025 3135 3245 3360 3480 3599 3721 3845 )
-
 conduct_match() {
-    MT=`ls -l ${NETS_DIR}/matches | wc -l`
-    MT=$((MT-1))
-    GM=200
-    for i in "${anchors[@]}"; do
-       if [ $i -lt $((MT+1)) ]; then
-	  AN=$i
-       elif [ $i -eq $((MT+1)) ]; then
-	  GM=400
-       fi
-    done
-
     MH=`find ${NETS_DIR}/hist/ID-*-model-$1.pb -type f | \
       sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
 
     if [ $GPUS -gt 0 ]; then
-       ND1=${NETS_DIR}/hist/ID-$((MT+1))-model-$1.uff
-       ND2=${NETS_DIR}/hist/ID-$AN-model-$1.uff
+       ND1=${NETS_DIR}/hist/ID-$3-model-$1.uff
+       ND2=${NETS_DIR}/hist/ID-$2-model-$1.uff
     else
-       ND1=${NETS_DIR}/hist/ID-$((MT+1))-model-$1.pb
-       ND2=${NETS_DIR}/hist/ID-$AN-model-$1.pb
+       ND1=${NETS_DIR}/hist/ID-$3-model-$1.pb
+       ND2=${NETS_DIR}/hist/ID-$2-model-$1.pb
     fi
 
     if [ ! -f "$ND1" ] || [ ! -f "$ND2" ]; then
@@ -136,21 +119,20 @@ conduct_match() {
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv ${SV} nn_type 0 nn_path ${ND1}" name=scorpio-$((MT+1)) \
+		arg="sv 800 nn_type 0 nn_path ${ND1}" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv ${SV} nn_type 0 nn_path ${ND2}" name=scorpio-$AN       \
-        -each tc=40/30000 -rounds $GM -pgnout match.pgn -openings file=2moves.pgn \
+		arg="sv 800 nn_type 0 nn_path ${ND2}" name=scorpio-$2 \
+        -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
     cd -
 
-    mv ${CUTECHESS}/match.pgn ${NETS_DIR}/matches/match${MT}.pgn
+    cat ${CUTECHESS}/match.pgn >> ${NETS_DIR}/matches/match$2-$3.pgn
+    rm -rf ${CUTECHESS}/match.pgn
 }
 
-if [ "$2" == "-m" ] || [ "$2" == "--match" ]; then
-    while true; do
-    	conduct_match $1
-	calculate_elo
-    done
+if [ "$1" == "-m" ] || [ "$1" == "--match" ]; then
+    conduct_match $2 $3 $4 200
+    calculate_elo
     exit 0
 fi
 
@@ -167,6 +149,7 @@ init0() {
     mkdir -p ${NETS_DIR}/games
     mkdir -p ${NETS_DIR}/train
     mkdir -p ${NETS_DIR}/matches
+    touch ${NETS_DIR}/pltdata
 }
 
 #convert to pb
@@ -271,9 +254,15 @@ rungames() {
 
 #train network
 train() {
+    MG=$(((V+1)*G))
+    if [ ${MG} -le ${NREPLAY} ]; then
+	MLR=`echo "(${LR}*${MG})/${NREPLAY}" | bc -l`
+    else
+	MLR=$LR
+    fi
     python src/train.py \
        --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
-       --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS}  \
+       --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${MLR} --epochs ${EPOCHS}  \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} ${NOAUXINP}
 }
@@ -287,30 +276,10 @@ move() {
     fi
 }
 
-#failed
-failed_gating() {
-    mv ${NETS_DIR}/ID-0-model-$1-best ${NETS_DIR}/ID-0-model-$1
-    mv ${NETS_DIR}/ID-0-model-$1-best.pb ${NETS_DIR}/ID-0-model-$1.pb
-    if [ $GPUS -gt 0 ]; then
-	mv ${NETS_DIR}/ID-0-model-$1-best.uff ${NETS_DIR}/ID-0-model-$1.uff
-    fi
-}
-#passed
-passed_gating() {
-    rm -rf ${NETS_DIR}/ID-0-model-$1-best*
-}
-
 #convert
 conv() {
     E=`ls -l ${NETS_DIR}/ID-*-model-$1 | wc -l`
     E=$((E-1))
-
-    #backup
-    cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/ID-0-model-$1-best
-    cp ${NETS_DIR}/ID-0-model-$1.pb ${NETS_DIR}/ID-0-model-$1-best.pb
-    if [ $GPUS -gt 0 ]; then
-    	cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/ID-0-model-$1-best.uff
-    fi
 
     #overwrite assuming it will pass
     mv ${NETS_DIR}/ID-$E-model-$1 ${NETS_DIR}/ID-0-model-$1
@@ -379,41 +348,19 @@ prepare() {
     #prepare shuffled replay buffer
     ND=$((NREPLAY/G))
     if [ $ND -ge $V ]; then
-        ND=$V
+        ND=$((V+1))
     else
         A=`seq 0 $((V-ND-1))`
         for i in $A; do
             rm -rf ${NETS_DIR}/data$i.epd
         done
     fi
-    cat ${NETS_DIR}/data*.epd > ${NETS_DIR}/temp.epd
 
-    shuf -n $((NSTEPS * BATCH_SIZE)) ${NETS_DIR}/temp.epd >x
+    rm -rf x
+    for i in ${NETS_DIR}/data*.epd; do
+    	shuf -n $((NSTEPS * BATCH_SIZE / ND)) $i >>x
+    done
     mv x ${NETS_DIR}/temp.epd
-}
-
-#gating
-gating() {
-    conduct_match ${Pnet}
-    calculate_elo
-   
-    mapfile -t A < <( \
-             cat ${NETS_DIR}/ratings.txt | sed 's/ID-//g' | \
-             awk '{ print $2 " " $3 }' | sort -rn | \
-	     awk '{ print $2 }' | head -2 \
-	            )
-
-    DIFF=$((A[1]-A[0]))
-
-    if [ ${DIFF} -gt 0 ]; then
-        echo "============ Failed!! =============="
-       	echo " Using older net for generating games."
-        echo "===================================="
-        fornets failed_gating
-    else
-        echo "============ Passed!! =============="
-        fornets passed_gating 
-    fi
 }
 
 #Selfplay training loop
@@ -430,7 +377,6 @@ selfplay_loop() {
 
         fornets move
 
-        gating
     done
 }
 
