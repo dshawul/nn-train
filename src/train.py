@@ -334,8 +334,20 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
 
             #train network
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
+                if not line:
+                   count = count - 1
+                   if count % EPD_CHUNK_SIZE == 0:
+                      break;
+
                 chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
                 end_t = time.time()
+                if (not line) and (count % args.batch_size != 0): 
+                   count = (count//args.batch_size)*args.batch_size
+                   if count > 0:
+                        del examples[count:]
+                   else:
+                        break
+
                 print "Time", int(end_t - start_t), "sec"
                 print "Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr
                 myNet.train(examples)

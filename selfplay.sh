@@ -18,10 +18,10 @@ REFRESH=20s
 SV=1               # mcts simulations
 G=16384            # train net after this number of games
 OPT=0              # Optimizer 0=SGD 1=ADAM
-LR=0.02            # learning rate
+LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=256         # Number of steps
+NSTEPS=240         # Number of steps
 CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
@@ -347,10 +347,11 @@ prepare() {
 
     #prepare shuffled replay buffer
     ND=$((NREPLAY/G))
-    if [ $ND -ge $V ]; then
+
+    if [ $ND -gt $V ]; then
         ND=$((V+1))
     else
-        A=`seq 0 $((V-ND-1))`
+        A=`seq 0 $((V-ND))`
         for i in $A; do
             rm -rf ${NETS_DIR}/data$i.epd
         done
@@ -358,8 +359,14 @@ prepare() {
 
     rm -rf x
     for i in ${NETS_DIR}/data*.epd; do
-    	shuf -n $((NSTEPS * BATCH_SIZE / ND)) $i >>x
+        shuf -n $((NSTEPS * BATCH_SIZE / ND)) $i >>x
     done
+    
+    M=$(( (NSTEPS * BATCH_SIZE) - ND * (NSTEPS * BATCH_SIZE / ND) ))
+    if [ $M -gt 0 ]; then
+        shuf -n $M $i >>x
+    fi
+
     mv x ${NETS_DIR}/temp.epd
 }
 

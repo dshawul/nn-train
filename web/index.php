@@ -69,13 +69,14 @@ foreach( $files as $i=>$f ) {
 
 <nav>
 <p>
-Latest run still with 2x32 net and 512 games per net
-with a sliding window of  15 nets. <br>
+Current run nets-7 is a 1-node playouts testing.
+Clearly it learns something but I am not sure how it will learn
+policy values without doing lookahead search.
 </p>
 
 <p>
-Also initial learning rate is 0.15 as opposed to 0.01 in run 1.
-The previous net had problems capturing peice values even until 600k games. <br>
+Also 1-node is the only thing feasible with the hardware I have.
+I will do 40-nodes testing later to see if it improves policy.
 </p>
 </nav>
 
