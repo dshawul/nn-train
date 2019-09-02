@@ -69,14 +69,8 @@ foreach( $files as $i=>$f ) {
 
 <nav>
 <p>
-Current run nets-7 is a 1-node playouts testing.
-Clearly it learns something but I am not sure how it will learn
-policy values without doing lookahead search.
-</p>
-
-<p>
-Also 1-node is the only thing feasible with the hardware I have.
-I will do 40-nodes testing later to see if it improves policy.
+16k games per net run with 2x32 net.
+The replay buffer is 32 nets wide.
 </p>
 </nav>
 
