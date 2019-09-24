@@ -119,9 +119,9 @@ conduct_match() {
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND1}" name=scorpio-$3 \
+		arg="sv 800 backup_type 7 nn_type 0 nn_path ${ND1}" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND2}" name=scorpio-$2 \
+		arg="sv 800 backup_type 7 nn_type 0 nn_path ${ND2}" name=scorpio-$2 \
         -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
     cd -

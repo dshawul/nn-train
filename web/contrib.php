@@ -2,7 +2,7 @@
 <html>
 <body>
 
-<h2>Game contirubtions of users</h2>
+<h2>Game contribution of users</h2>
 
 <?php
 
