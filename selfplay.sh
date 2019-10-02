@@ -14,6 +14,10 @@ BAYESELO=~/BayesElo/bayeselo
 DIST=0
 REFRESH=20s
 
+#pgn source directory or file
+SRCPGN_DIR=files.txt
+CI=0 #starting index
+
 #setup parameters for selfplay
 SV=1               # mcts simulations
 G=16384            # train net after this number of games
@@ -210,7 +214,7 @@ send_server() {
    echo $@ > servinp
 }
 
-if [ $DIST -ge 1 ]; then
+if [ $DIST -eq 1 ]; then
    echo "Starting server"
    if [ ! -p servinp ]; then
        mkfifo servinp
@@ -334,11 +338,69 @@ get_file_games() {
     done
 }
 
+#train from PGN source
+if [ -d ${SRCPGN_DIR}  ]; then
+    SRCTYPE=0
+    pgns=( `find ${SRCPGN_DIR} -type f` )
+elif [ -f ${SRCPGN_DIR} ]; then
+    SRCTYPE=1
+    pgns=( `cat ${SRCPGN_DIR}` )
+fi
+
+#get fixed number of games from source
+get_src_games() {
+    T=0
+    while true; do
+        PGN=${pgns[${CI}]}
+        PGNF=pgndir
+        if ! [ -e ${PGNF} ]; then
+            mkdir ${PGNF}
+            if [ $SRCTYPE -eq 0 ]; then
+                tar -xf ${PGN} -C ${PGNF} --strip-components=1
+            elif [ $SRCTYPE -eq 1 ]; then
+                wget ${PGN} -O xtempx
+                tar -xf xtempx -C ${PGNF} --strip-components=1
+                rm -rf xtempx
+            fi
+        else
+            echo 'Skipping extraction.'
+        fi
+
+        P=$((G-T))
+        M=`find ${PGNF} -type f | wc -l`
+        if [ $M -lt $P ]; then
+            P=$M
+        fi
+        F=`find ${PGNF} -type f | head -n ${P}`
+        cat $F >>cgames.pgn
+        rm -rf $F
+        T=$((T+P))
+        M=`find ${PGNF} -type f | wc -l`
+        if [ $M -eq 0 ]; then
+            CI=$((CI+1))
+            rm -rf ${PGNF}
+        fi
+
+        echo "CI = " $CI
+        echo "Games accumulated = " $T
+        if [ $T -ge $G ]; then
+            break
+        fi
+    done
+
+    cp cgames.pgn ${SC}
+    ${SC}/${EXE} pgn_to_epd cgames.pgn ctrain.epd quit
+    mv ${SC}/ctrain.epd .
+    backup_data
+}
+
 #prepare training data
 prepare() {
     
     #run games
-    if [ $DIST -ge 1 ]; then
+    if [ $DIST -eq 2 ]; then
+        get_src_games
+    elif [ $DIST -eq 1 ]; then
         send_server update-network
         get_file_games
     else
