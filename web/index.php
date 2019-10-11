@@ -69,8 +69,12 @@ foreach( $files as $i=>$f ) {
 
 <nav>
 <p>
-16k games per net run with 2x32 net.
-The replay buffer is 32 nets wide.
+The big run of a 20x256 net has started off the already existing supervized trained scorpio networks.
+I am training all 4 networks, 2x32,6x64,12x128 and 20x256, at the same time with the 20b used for 
+selfplay game generation. The supervized net should be around 3050 ccrl elo so this is right around 
+where lc0 makes first LR drops. So selfplay training is started with an LR = 0.02. Since this training 
+requires big hardware, I am doing it on a different machine and copying the data to this web server.
+If there is enough contirubtors, I will make this distributed training ...
 </p>
 </nav>
 

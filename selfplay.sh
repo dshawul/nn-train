@@ -206,8 +206,7 @@ else
 fi
 
 #start network id
-V=`ls -l ${NETS_DIR}/hist/ID-*-model-${Pnet}.pb | wc -l`
-V=$((V-1))
+V=`ls -l ${NETS_DIR}/games/games*.pgn.gz | wc -l`
 
 #start server
 send_server() {
@@ -309,13 +308,12 @@ get_selfplay_games() {
     rm -rf cgames.pgn ctrain.epd
     cd ${SC}
     rungames ${G}
-    cat games*.pgn > cgames.pgn
-    cat train*.epd > ctrain.epd
-    rm -rf games*.pgn train*.epd
+    cat games*.pgn* > cgames.pgn
+    cat train*.epd* > ctrain.epd
+    rm -rf games*.pgn* train*.epd*
     cd -
     mv ${SC}/cgames.pgn .
     mv ${SC}/ctrain.epd .
-    backup_data
 }
 
 #get games from file
@@ -332,7 +330,6 @@ get_file_games() {
             echo '================'
             echo 'Training new net'
             echo '================'
-            backup_data
             return
         fi    
     done
@@ -391,7 +388,6 @@ get_src_games() {
     cp cgames.pgn ${SC}
     ${SC}/${EXE} pgn_to_epd cgames.pgn ctrain.epd quit
     mv ${SC}/ctrain.epd .
-    backup_data
 }
 
 #prepare training data
@@ -406,6 +402,7 @@ prepare() {
     else
         get_selfplay_games
     fi
+    backup_data
 
     #prepare shuffled replay buffer
     ND=$((NREPLAY/G))
