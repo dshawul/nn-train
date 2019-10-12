@@ -47,9 +47,9 @@ NETS_DIR=${PWD}/nets-${WORK_ID}
 
 #mpi
 RANKS=1
-SDIR=$( dirname ${BASH_SOURCE[0]} )
+SDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ $RANKS -gt 1 ]; then
-   MPICMD=mpirun -np ${RANKS} --map-by node --bind-to none
+   MPICMD="mpirun -np ${RANKS} --map-by node --bind-to none"
 else
    MPICMD=
 fi
@@ -310,7 +310,7 @@ get_selfplay_games() {
     cat games*.pgn* > cgames.pgn
     cat train*.epd* > ctrain.epd
     rm -rf games*.pgn* train*.epd*
-    cd -
+    cd - > /dev/null 2>&1
     mv ${SC}/cgames.pgn .
     mv ${SC}/ctrain.epd .
 }
@@ -326,9 +326,6 @@ get_file_games() {
         fi
         echo 'Accumulated games: ' $LN of $G
         if [ $LN -ge $G ]; then
-            echo '================'
-            echo 'Training new net'
-            echo '================'
             return
         fi    
     done
@@ -389,21 +386,8 @@ get_src_games() {
     mv ${SC}/ctrain.epd .
 }
 
-#prepare training data
-prepare() {
-    
-    #run games
-    if [ $DIST -eq 2 ]; then
-        get_src_games
-    elif [ $DIST -eq 1 ]; then
-        send_server update-network
-        get_file_games
-    else
-        get_selfplay_games
-    fi
-    backup_data
-
-    #prepare shuffled replay buffer
+#prepare shuffled replay buffer
+replay_buffer() {
     ND=$((NREPLAY/G))
 
     if [ $ND -gt $V ]; then
@@ -428,13 +412,36 @@ prepare() {
     mv x ${NETS_DIR}/temp.epd
 }
 
+#prepare training data
+prepare() {
+    
+    #run games
+    if [ $DIST -eq 2 ]; then
+        get_src_games
+    elif [ $DIST -eq 1 ]; then
+        send_server update-network
+        get_file_games
+    else
+        get_selfplay_games
+    fi
+
+    #backup data
+    echo "Backing up training data"
+    time backup_data
+
+    #replay
+    echo "Sampling from replay buffer"
+    time replay_buffer
+}
+
 #Selfplay training loop
 selfplay_loop() {
     while true ; do
 
         prepare
 
-        train
+        echo 'Training new net'
+        time train
 
         fornets conv
 
