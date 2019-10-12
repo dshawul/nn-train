@@ -45,6 +45,15 @@ BATCH_SIZE=4096
 WORK_ID=6
 NETS_DIR=${PWD}/nets-${WORK_ID}
 
+#mpi
+RANKS=1
+SDIR=$( dirname ${BASH_SOURCE[0]} )
+if [ $RANKS -gt 1 ]; then
+   MPICMD=mpirun -np ${RANKS} --map-by node --bind-to none
+else
+   MPICMD=
+fi
+
 #kill background processes on exit
 trap 'kill $(jobs -p)' EXIT INT
 
@@ -232,27 +241,16 @@ else
 fi
 
 #run selfplay
-run() {
-    export CUDA_VISIBLE_DEVICES="$1" 
-    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
-           policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    taskset -c $3 time ./${EXE} nn_type 0 nn_path ${NDIR} new ${SCOPT} \
-            sv ${SV} pvstyle 1 selfplayp $2 games$1.pgn train$1.epd quit
-}
-
-#use all gpus
 rungames() {
     if [ $GPUS = 0 ]; then
-        run 0 $1 0-$CPUS:1 &
+        GW=$(($1/RANKS))
     else
-        I=$((CPUS/GPUS))
-        GW=$((G/GPUS))
-        for k in `seq 0 $((GPUS-1))`; do
-            run $k $GW $((k*I))-$((k*I+I-1)):1 &
-        done
+        GW=$(($1/(RANKS*GPUS)))
     fi
-    wait
-    echo "All jobs finished"
+    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
+           policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
+    ALLOPT="nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
+    time ${MPICMD} ${SDIR}/scripts/job-one.sh ./${EXE} ${ALLOPT}
 }
 
 #train network
