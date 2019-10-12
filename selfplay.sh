@@ -248,9 +248,10 @@ rungames() {
         GW=$(($1/(RANKS*GPUS)))
     fi
     SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
-           policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    ALLOPT="nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
-    time ${MPICMD} ${SDIR}/scripts/job-one.sh ./${EXE} ${ALLOPT}
+           backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
+    ALLOPT="nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} \
+	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
+    time ${MPICMD} ${SDIR}/nn-dist/scripts/job-one.sh ./${EXE} ${ALLOPT}
 }
 
 #train network
