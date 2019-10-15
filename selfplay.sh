@@ -14,12 +14,8 @@ BAYESELO=~/BayesElo/bayeselo
 DIST=0
 REFRESH=20s
 
-#pgn source directory or file
-SRCPGN_DIR=files.txt
-CI=0 #starting index
-
 #setup parameters for selfplay
-SV=1               # mcts simulations
+SV=800             # mcts simulations
 G=16384            # train net after this number of games
 OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
@@ -44,6 +40,11 @@ BATCH_SIZE=4096
 #nets directory
 WORK_ID=6
 NETS_DIR=${PWD}/nets-${WORK_ID}
+
+#pgn/epd source directory, and starting index
+SRCPGN_DIR=files.txt
+SRCEPD_DIR=${HOME}/storage/scorpiozero/nets-7/train
+CI=0
 
 #mpi
 RANKS=1
@@ -341,7 +342,7 @@ elif [ -f ${SRCPGN_DIR} ]; then
 fi
 
 #get fixed number of games from source
-get_src_games() {
+get_src_pgn() {
     T=0
     while true; do
         PGN=${pgns[${CI}]}
@@ -386,6 +387,12 @@ get_src_games() {
     mv ${SC}/ctrain.epd .
 }
 
+#get training positions from source
+get_src_epd() {
+    cp ${SRCEPD_DIR}/train${CI}.epd.gz ${NETS_DIR}/data${CI}.epd.gz
+    gzip -d ${NETS_DIR}/data${CI}.epd.gz
+}
+
 #prepare shuffled replay buffer
 replay_buffer() {
     ND=$((NREPLAY/G))
@@ -416,8 +423,10 @@ replay_buffer() {
 prepare() {
     
     #run games
-    if [ $DIST -eq 2 ]; then
-        get_src_games
+    if [ $DIST -eq 3 ]; then
+        get_src_epd
+    elif [ $DIST -eq 2 ]; then
+        get_src_pgn
     elif [ $DIST -eq 1 ]; then
         send_server update-network
         get_file_games
@@ -426,8 +435,10 @@ prepare() {
     fi
 
     #backup data
-    echo "Backing up training data"
-    time backup_data
+    if [ $DIST -ne 3 ]; then
+       echo "Backing up training data"
+       time backup_data
+    fi
 
     #replay
     echo "Sampling from replay buffer"

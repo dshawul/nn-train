@@ -22,7 +22,9 @@ BOARDX = 8
 BOARDY = 8
 NPOLICY = 4672
 NPARMS = 5
-EPD_CHUNK_SIZE = 4096 * 80
+NBATCH = 80
+BATCH_SIZE = 4096
+EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
 USE_EPD = False
 
 def fill_piece(iplanes, ix, bb, b):
@@ -291,6 +293,7 @@ class NNet():
                 xi = [ipln,ipar]
             else:
                 xi = [ipln]
+
             self.model[i].fit(x = xi, y = [oval, opol],
                   batch_size=self.batch_size,
                   sample_weight=[vweights, pweights],
@@ -381,11 +384,11 @@ def main(argv):
     parser.add_argument('--trn','-t', dest='trn', required=False, help='Path to labeled training file')
     parser.add_argument('--dir', dest='dir', required=False, default="nets", help='Path to network files')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
-    parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=4096, help='Training batch size.')
+    parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=BATCH_SIZE, help='Training batch size.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
     parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.0, help='Fraction of sample to use for validation.')
-    parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=(EPD_CHUNK_SIZE//80), help='PGN chunk size.')
+    parser.add_argument('--chunk-size',dest='chunk_size', required=False, type=int, default=(EPD_CHUNK_SIZE//NBATCH), help='PGN chunk size.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
@@ -409,7 +412,7 @@ def main(argv):
     
     myNet = NNet(args)
 
-    EPD_CHUNK_SIZE = args.chunk_size * 80
+    EPD_CHUNK_SIZE = args.chunk_size * NBATCH
     CHANNELS = args.channels
     BOARDX = args.boardx
     BOARDY = args.boardy
