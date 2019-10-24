@@ -216,7 +216,11 @@ else
 fi
 
 #start network id
-V=`ls -l ${NETS_DIR}/games/games*.pgn.gz | wc -l`
+if [ $DIST -eq 3 ]; then
+   V=$CI
+else
+   V=`ls -l ${NETS_DIR}/games/games*.pgn.gz | wc -l`
+fi
 
 #start server
 send_server() {
@@ -389,8 +393,9 @@ get_src_pgn() {
 
 #get training positions from source
 get_src_epd() {
-    cp ${SRCEPD_DIR}/train${CI}.epd.gz ${NETS_DIR}/data${CI}.epd.gz
-    gzip -d ${NETS_DIR}/data${CI}.epd.gz
+    cp ${SRCEPD_DIR}/train$CI.epd.gz ${NETS_DIR}/data$CI.epd.gz
+    gzip -fd ${NETS_DIR}/data$CI.epd.gz
+    CI=$((CI+1))
 }
 
 #prepare shuffled replay buffer

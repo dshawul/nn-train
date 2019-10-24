@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 import time
 import chess
 import chess.pgn
@@ -13,6 +14,7 @@ from joblib import Parallel, delayed, dump, load
 from keras.models import load_model
 from keras import optimizers
 from keras import backend as K
+from keras.backend.tensorflow_backend import set_session
 from keras.utils import to_categorical, multi_gpu_model
 import tensorflow as tf
 
@@ -409,7 +411,15 @@ def main(argv):
     parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
 
     args = parser.parse_args()
-    
+
+    # allow memory growth
+    logging.getLogger('tensorflow').disabled=True
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    sess = tf.Session(config=config)
+    set_session(sess)
+
+    # init net
     myNet = NNet(args)
 
     EPD_CHUNK_SIZE = args.chunk_size * NBATCH
