@@ -28,6 +28,7 @@ NBATCH = 80
 BATCH_SIZE = 4096
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
 USE_EPD = False
+VALUE_TARGET = 0
 
 def fill_piece(iplanes, ix, bb, b):
     if AUX_INP:
@@ -156,8 +157,18 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
         oresult[id] = result
 
         #value
-        ovalue[id] = value
+        if VALUE_TARGET == 0:
+            ovalue[id,:] = 0.0
+            ovalue[id,result] = 1.0
+        else:
+            ovalue[id,1] = 0.7 * min(value, 1 - value)
+            ovalue[id,0] = value - ovalue[id,1] / 2.0
+            ovalue[id,2] = 1 - ovalue[id,0] - ovalue[id,1]
+            if VALUE_TARGET == 2:
+                ovalue[id,:] /= 2.0
+                ovalue[id,result] += 0.5
 
+        #policy
         for i in range(offset, offset+nmoves*2, 2):
             opolicy[id, int(words[i])] = float(words[i+1])
 
@@ -269,25 +280,23 @@ class NNet():
         ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
 
         oval_memmap = os.path.join(folder, 'oval_memmap')
-        oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,),mode='w+')
+        oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,3),mode='w+')
 
         #multiprocess
         nlen = N / self.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(self.cores) ]
         Parallel(n_jobs=self.cores)( delayed(fill_examples) (                      \
-            examples[sl],ipln[sl,:,:,:],ipar[sl,:],opol[sl,:],ores[sl],oval[sl]    \
+            examples[sl],ipln[sl,:,:,:],ipar[sl,:],opol[sl,:],ores[sl],oval[sl,:]  \
             ) for sl in slices )
 
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
-        vweights = np.ones(oval.size)
+        vweights = np.ones(ores.size)
         if self.pol_grad > 0:
-            pweights = (1.0 - ores / 2.0) - oval
+            pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0)
         else:
-            pweights = np.ones(oval.size)
-
-        oval = to_categorical(ores, 3)
+            pweights = np.ones(ores.size)
 
         for i in range(len(self.model)):
             print "Fitting model",i
@@ -380,6 +389,7 @@ def main(argv):
     global BOARDX
     global BOARDY
     global NPOLICY
+    global VALUE_TARGET
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -409,6 +419,7 @@ def main(argv):
     parser.add_argument('--boardx','-x', dest='boardx', required=False, type=int, default=BOARDX, help='board x-dimension.')
     parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
     parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
+    parser.add_argument('--value-target',dest='value_target', required=False, type=int, default=VALUE_TARGET, help='Value target 0=z, 1=q and 2=(q+z)/2.')
 
     args = parser.parse_args()
 
@@ -428,6 +439,7 @@ def main(argv):
     BOARDY = args.boardy
     NPOLICY = args.npolicy
     AUX_INP = args.noauxinp
+    VALUE_TARGET = args.value_target
 
     chunk = args.id
 
