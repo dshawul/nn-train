@@ -292,11 +292,11 @@ class NNet():
         end_t = time.time()
         print "Time", int(end_t - start_t), "sec"
         
-        vweights = np.ones(ores.size)
+        vweights = None
+        pweights = None
         if self.pol_grad > 0:
+            vweights = np.ones(ores.size)
             pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0)
-        else:
-            pweights = np.ones(ores.size)
 
         for i in range(len(self.model)):
             print "Fitting model",i
@@ -305,11 +305,17 @@ class NNet():
             else:
                 xi = [ipln]
 
-            self.model[i].fit(x = xi, y = [oval, opol],
-                  batch_size=self.batch_size,
-                  sample_weight=[vweights, pweights],
-                  validation_split=self.vald_split,
-                  epochs=self.epochs)
+            if self.pol_grad > 0:
+                self.model[i].fit(x = xi, y = [oval, opol],
+                      batch_size=self.batch_size,
+                      sample_weight=[vweights, pweights],
+                      validation_split=self.vald_split,
+                      epochs=self.epochs)
+            else:
+                self.model[i].fit(x = xi, y = [oval, opol],
+                      batch_size=self.batch_size,
+                      validation_split=self.vald_split,
+                      epochs=self.epochs)
 
     def save_checkpoint(self, folder, filename, args, iopt=False):
         filepath = os.path.join(folder, filename)
@@ -443,9 +449,12 @@ def main(argv):
 
     chunk = args.id
 
+    start_t = time.time()
+    print "Loadng networks"
     myNet.load_checkpoint(args.dir,"ID-" + str(chunk), args)
-
     myNet.compile_model(args)
+    end_t = time.time()
+    print "Time", int(end_t - start_t), "sec"
 
     if args.rand:
         myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, False)
