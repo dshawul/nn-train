@@ -36,6 +36,7 @@ NPOLICY=4672
 NOAUXINP=
 TRNFLG=--epd
 BATCH_SIZE=4096
+DISTILL=0
 
 #nets directory
 WORK_ID=6
@@ -180,10 +181,8 @@ init() {
     convert-to-pb ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
-        cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/hist/ID-0-model-$1.uff
     fi
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
-    cp ${NETS_DIR}/ID-0-model-$1.pb ${NETS_DIR}/hist/ID-0-model-$1.pb
 }
 
 #loop over all nets
@@ -252,9 +251,14 @@ rungames() {
     else
         GW=$(($1/(RANKS*GPUS)))
     fi
+    if [ $DISTILL = 0 ]; then
+    	NETW="nn_type 0 nn_path ${NDIR}"
+    else
+	NETW=""
+    fi
     SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
            backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
-    ALLOPT="nn_type 0 nn_path ${NDIR} new ${SCOPT} sv ${SV} \
+    ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
 	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
     time ${MPICMD} ${SDIR}/nn-dist/scripts/job-one.sh ./${EXE} ${ALLOPT}
 }
@@ -263,24 +267,20 @@ rungames() {
 train() {
     MG=$(((V+1)*G))
     if [ ${MG} -le ${NREPLAY} ]; then
-	MLR=`echo "(${LR}*${MG})/${NREPLAY}" | bc -l`
+        MLR=`echo "(${LR}*${MG})/${NREPLAY}" | bc -l`
     else
-	MLR=$LR
+        MLR=$LR
     fi
     python src/train.py \
        --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
        --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${MLR} --epochs ${EPOCHS}  \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
-       --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} ${NOAUXINP}
+       --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
 }
 
 #move
 move() {
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-${V}-model-$1
-    cp ${NETS_DIR}/ID-0-model-$1.pb ${NETS_DIR}/hist/ID-${V}-model-$1.pb
-    if [ $GPUS -gt 0 ]; then
-        cp ${NETS_DIR}/ID-0-model-$1.uff ${NETS_DIR}/hist/ID-${V}-model-$1.uff
-    fi
 }
 
 #convert
@@ -290,7 +290,7 @@ conv() {
 
     #overwrite assuming it will pass
     mv ${NETS_DIR}/ID-$E-model-$1 ${NETS_DIR}/ID-0-model-$1
-    rm -rf ${NETS_DIR}/ID-[1-$E]-model-$1
+    rm -rf ${NETS_DIR}/ID-{1..$E}-model-$1
     convert-to-pb ID-0-model-$1
     if [ $GPUS -gt 0 ]; then
         convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
