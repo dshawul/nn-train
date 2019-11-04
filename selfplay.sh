@@ -167,21 +167,12 @@ init0() {
     touch ${NETS_DIR}/pltdata
 }
 
-#convert to pb
-convert-to-pb() {
-    python src/k2tf_convert.py -m ${NETS_DIR}/$1 \
-           --name $1.pb --prefix 'value' -n 2 -o ${NETS_DIR}
-}
-
 #initialize random network
 init() {
     python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
             ${NOAUXINP} --channels ${CHANNELS} --pol ${POL_STYLE} \
             --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY}
-    convert-to-pb ID-0-model-$1
-    if [ $GPUS -gt 0 ]; then
-        convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
-    fi
+    ./scripts/prepare.sh ${NETS_DIR} 0 $1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
 }
 
@@ -218,7 +209,7 @@ fi
 if [ $DIST -eq 3 ]; then
    V=$CI
 else
-   V=`ls -l ${NETS_DIR}/games/games*.pgn.gz | wc -l`
+   V=`ls -at ${NETS_DIR}/hist/ID-*-model-${Pnet} | head -1 | xargs -n 1 basename | grep -o -E '[0-9]+' | head -1`
 fi
 
 #start server
@@ -290,25 +281,25 @@ conv() {
 
     #overwrite assuming it will pass
     mv ${NETS_DIR}/ID-$E-model-$1 ${NETS_DIR}/ID-0-model-$1
-    rm -rf ${NETS_DIR}/ID-{1..$E}-model-$1
-    convert-to-pb ID-0-model-$1
-    if [ $GPUS -gt 0 ]; then
-        convert-to-uff ${NETS_DIR}/ID-0-model-$1.pb -O value/Softmax -O policy/Reshape
-        rm -rf ${NETS_DIR}/*.trt
-    fi
+    for i in $(seq 1 $E); do
+       rm -rf ${NETS_DIR}/ID-$i-model-$1
+    done
+    ./scripts/prepare.sh ${NETS_DIR} 0 $1
 }
 
 #backup data
 backup_data() {
     mv cgames.pgn ${NETS_DIR}/games/games$V.pgn
     gzip -f ${NETS_DIR}/games/games$V.pgn
-    mv ctrain.epd ${NETS_DIR}/train/train$V.epd
-    cp ${NETS_DIR}/train/train$V.epd ${NETS_DIR}/data$V.epd 
+    cp ${NETS_DIR}/data$V.epd ${NETS_DIR}/train/train$V.epd
     gzip -f ${NETS_DIR}/train/train$V.epd
 }
 
 #get selfplay games
 get_selfplay_games() {
+    if [ $GPUS -gt 0 ]; then
+        rm -rf ${NETS_DIR}/*.trt
+    fi
     rm -rf cgames.pgn ctrain.epd
     cd ${SC}
     rungames ${G}
@@ -440,7 +431,8 @@ prepare() {
     fi
 
     #backup data
-    if [ $DIST -ne 3 ]; then
+    mv ctrain.epd ${NETS_DIR}/data$V.epd
+    if [ $DIST -ne 3 ] && [ $DISTILL -eq 0 ]; then
        echo "Backing up training data"
        time backup_data
     fi
