@@ -26,6 +26,8 @@ CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
 POL_GRAD=0         # Use policy gradient algo.
+POL_WEIGHT=1       # Policy weight
+VAL_WEIGHT=1       # Value weight
 
 #Network parameters
 BOARDX=8
@@ -263,8 +265,8 @@ train() {
         MLR=$LR
     fi
     python src/train.py \
-       --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} \
-       --cores $((CPUS/2)) --opt ${OPT} --learning-rate ${MLR} --epochs ${EPOCHS}  \
+       --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
+       --opt ${OPT} --learning-rate ${MLR} --epochs ${EPOCHS} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
 }
