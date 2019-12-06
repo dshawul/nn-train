@@ -21,7 +21,7 @@ OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=240         # Number of steps
+NSTEPS=256         # Number of steps
 CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
@@ -437,7 +437,7 @@ selfplay_loop() {
 
         prepare
 
-        echo 'Training new net from net ID = ', $V
+        echo 'Training new net from net ID = ' $V
         time train
 
         fornets conv
