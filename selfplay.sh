@@ -258,15 +258,9 @@ rungames() {
 
 #train network
 train() {
-    MG=$(((V+1)*G))
-    if [ ${MG} -le ${NREPLAY} ]; then
-        MLR=`echo "(${LR}*${MG})/${NREPLAY}" | bc -l`
-    else
-        MLR=$LR
-    fi
     python src/train.py \
        --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
-       --opt ${OPT} --learning-rate ${MLR} --epochs ${EPOCHS} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
+       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
 }
@@ -395,9 +389,7 @@ get_src_epd() {
 replay_buffer() {
     ND=$((NREPLAY/G))
 
-    if [ $ND -gt $V ]; then
-        ND=$((V+1))
-    else
+    if [ $ND -le $V ]; then
         A=`seq 0 $((V-ND))`
         for i in $A; do
             rm -rf ${NETS_DIR}/data$i.epd
@@ -408,11 +400,6 @@ replay_buffer() {
     for i in ${NETS_DIR}/data*.epd; do
         shuf -n $((NSTEPS * BATCH_SIZE / ND)) $i >>x
     done
-    
-    M=$(( (NSTEPS * BATCH_SIZE) - ND * (NSTEPS * BATCH_SIZE / ND) ))
-    if [ $M -gt 0 ]; then
-        shuf -n $M $i >>x
-    fi
 
     mv x ${NETS_DIR}/temp.epd
 }
@@ -450,7 +437,7 @@ selfplay_loop() {
 
         prepare
 
-        echo 'Training new net'
+        echo 'Training new net from net ID = ', $V
         time train
 
         fornets conv
