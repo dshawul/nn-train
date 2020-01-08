@@ -3,7 +3,7 @@
 set -e
 
 #set working directory and executable
-SC=${PWD}/nn-dist/Scorpio-train/bin/Linux
+SC=${PWD}/nn-dist/Scorpio/bin/Linux
 EXE=scorpio.sh
 
 #location of some external tools
@@ -21,12 +21,12 @@ OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=256         # Number of steps
+NSTEPS=2048        # Number of steps
 CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
 POL_GRAD=0         # Use policy gradient algo.
-POL_WEIGHT=1       # Policy weight
+POL_WEIGHT=2       # Policy weight
 VAL_WEIGHT=1       # Value weight
 
 #Network parameters
@@ -37,7 +37,8 @@ POL_STYLE=1
 NPOLICY=4672
 NOAUXINP=
 TRNFLG=--epd
-BATCH_SIZE=4096
+NBATCH=512
+BATCH_SIZE=512
 DISTILL=0
 
 #nets directory
@@ -249,7 +250,7 @@ rungames() {
     else
 	NETW=""
     fi
-    SCOPT="reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
+    SCOPT="alphabeta_man_c 0 reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
            backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
     ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
 	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
@@ -261,7 +262,7 @@ train() {
     python src/train.py \
        --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
-       --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
+       --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
 }
 
