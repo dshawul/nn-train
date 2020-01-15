@@ -3,30 +3,30 @@ Chess neural network training program. This program takes chess games or result-
 epd positions and trains a neural network for prediction of the outcome of a game from a positon. 
 So this is only a `value network` -- AlphaZero also has `policy network` that represent move probabilities.
 
-      usage: train.py [-h] [--epd EPD] [--trn TRN] [--id ID]
-                      [--batch-size BATCH_SIZE] [--epochs EPOCHS]
-                      [--learning-rate LR] [--vald-split VALD_SPLIT]
-                      [--chunk-size CHUNK_SIZE] [--cores CORES] [--gpus GPUS]
-                      [--gzip] [--nets NETS [NETS ...]] [--rsav RSAV]
+      usage: train.py [-h] [--epd EPD] [--trn TRN] [--dir DIR] [--id ID]
+                      [--batch-size BATCH_SIZE] [--nbatch NBATCH] [--epochs EPOCHS]
+                      [--learning-rate LR] [--vald-split VALD_SPLIT] [--cores CORES]
+                      [--gpus GPUS] [--gzip] [--nets NETS [NETS ...]] [--rsav RSAV]
                       [--rsavo RSAVO] [--rand] [--opt OPT] [--pol POLICY]
                       [--pol_w POL_W] [--val_w VAL_W] [--pol_grad POL_GRAD]
                       [--noauxinp] [--channels CHANNELS] [--boardx BOARDX]
                       [--boardy BOARDY] [--npolicy NPOLICY]
+                      [--value-target VALUE_TARGET]
 
       optional arguments:
         -h, --help            show this help message and exit
         --epd EPD, -e EPD     Path to labeled EPD file for training
         --trn TRN, -t TRN     Path to labeled training file
+        --dir DIR             Path to network files
         --id ID, -i ID        ID of neural network to load.
         --batch-size BATCH_SIZE, -b BATCH_SIZE
                               Training batch size.
+        --nbatch NBATCH       Number of batches to process at one time.
         --epochs EPOCHS       Training epochs.
         --learning-rate LR, -l LR
                               Training learning rate.
         --vald-split VALD_SPLIT
                               Fraction of sample to use for validation.
-        --chunk-size CHUNK_SIZE
-                              PGN chunk size.
         --cores CORES         Number of cores to use.
         --gpus GPUS           Number of gpus to use.
         --gzip, -z            Process zipped file.
@@ -48,6 +48,8 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
         --boardy BOARDY, -y BOARDY
                               board y-dimension.
         --npolicy NPOLICY     The number of maximum possible moves.
+        --value-target VALUE_TARGET
+                              Value target 0=z, 1=q and 2=(q+z)/2.
 
 To train 2x32 and 6x64 networks from a gzipped labelled epd with result and best moves using
 32 cpu cores and 4 gpus
