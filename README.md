@@ -1,7 +1,6 @@
 # nn-train
-Chess neural network training program. This program takes chess games or result-labelled
-epd positions and trains a neural network for prediction of the outcome of a game from a positon. 
-So this is only a `value network` -- AlphaZero also has `policy network` that represent move probabilities.
+Chess (and variants) neural network training program. This program takes result-labelled epd positions and 
+trains a neural network to predict the outcome and move choice for a position.
 
       usage: train.py [-h] [--epd EPD] [--trn TRN] [--dir DIR] [--id ID]
                       [--batch-size BATCH_SIZE] [--nbatch NBATCH] [--epochs EPOCHS]
@@ -11,7 +10,7 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
                       [--pol_w POL_W] [--val_w VAL_W] [--pol_grad POL_GRAD]
                       [--noauxinp] [--channels CHANNELS] [--boardx BOARDX]
                       [--boardy BOARDY] [--npolicy NPOLICY]
-                      [--value-target VALUE_TARGET]
+                      [--value-target VALUE_TARGET] [--piece-map PCMAP]
 
       optional arguments:
         -h, --help            show this help message and exit
@@ -50,29 +49,26 @@ So this is only a `value network` -- AlphaZero also has `policy network` that re
         --npolicy NPOLICY     The number of maximum possible moves.
         --value-target VALUE_TARGET
                               Value target 0=z, 1=q and 2=(q+z)/2.
+        --piece-map PCMAP     Map pieces to planes
 
 To train 2x32 and 6x64 networks from a gzipped labelled epd with result and best moves using
 32 cpu cores and 4 gpus
     
-    python train.py --gzip --epd quiet.epd.gz --nets 0 1 --cores 32 --gpus 4
+    python src/train.py --dir nets --gzip --epd quiet.epd.gz --nets 0 1 --cores 32 --gpus 4
 
 Then to convert your keras model to protobuf tensorflow format:
     
-    ./convert.sh ID-1-model-0
+    ./scripts/convert-to-pb.sh nets/ID-1-model-0
 
-You will get an `ID-1-model-0.pb` in the nets/ directory. Rename it to something recognizable such 
-as `net-6x64.pb` and put it some place it can be used by Scorpio.
+To also convert to UFF format use
+
+    ./scripts/prepare.sh nets 1
 
 To restart interrupted training from specific ID e.g. 120
     
-    python train.py --epd quiet.epd --id 120
+    python src/train.py --epd quiet.epd --id 120
 
 You can build your own network (different number of blocks and filters) by modifying resnet.py.
-
-It should also be easy to use other types of networks -- as long as you keep the input planes the same.
-The input planes are hard-wired in the probing code (egbbdll) so you won't be able to use your networks
-unless you change that as well. In the future, I plan to offload that to the network file to give the user
-maximum flexibility in designing new networks.
 
 ## Self play training
 
@@ -82,17 +78,3 @@ To train networks by reinforcement learning issue command
 
 This will train networks (20x256, 12x128, 6x64 and 2x32) using selfplay games produced
 by the 20x256 network. The net used for producing selfplay games is mentioned first
-
-## Preparing training data
-
-If you have a list of tar'ed pgn files in directory, you can issue the below command to prepare
-training data that takes into account replay buffer concept of A0
-
-    ./preptrain.sh -d /path/to/pgn 0
-
-The number 0 indicates the id of the first file -- change this when resuming preparation.
-
-If the files are to be downloaded from the web,such as lc0's http://data.lczero.org/files/, prepare
-a file with a list of links to download the pgn files from, and then issue
-
-    ./preptrain.sh -w files 0
