@@ -3,7 +3,6 @@ import os
 import logging
 import time
 import chess
-import chess.pgn
 import resnet
 import argparse
 import gzip
@@ -29,6 +28,7 @@ BATCH_SIZE = 512
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
 USE_EPD = False
 VALUE_TARGET = 0
+PIECE_MAP = "KQRBNPkqrbnp"
 
 def fill_piece(iplanes, ix, bb, b):
     if AUX_INP:
@@ -95,18 +95,78 @@ def fill_planes(iplanes, iparams, b):
         v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
         iparams[4] = v
 
+def fill_planes_fen(iplanes, fen, player):
+
+    RANK_U = BOARDY - 1
+    FILE_U = BOARDX - 1
+
+    #board
+    cnt = 0
+    for r in range(RANK_U, -1, -1):
+        for f in range(0, FILE_U + 1, 1):
+            c = fen[cnt]
+            idx = PIECE_MAP.find(c)
+            if idx != -1:
+                if player == 0:
+                    iplanes[r,  f,  idx] = 1.0
+                else:
+                    iplanes[RANK_U - r,  f,  (idx^1)] = 1.0
+                cnt = cnt + 1
+            elif c.isdigit():
+                b = int(c)
+                cnt = cnt + 1
+                c = fen[cnt]
+                if c.isdigit():
+                    cnt = cnt + 1
+                f = f + b - 1
+            else:
+                break
+        cnt = cnt + 1
+
+    #holdings
+    if fen[cnt - 1] == '[':
+
+        N_PIECES = CHANNELS // 2
+
+        if fen[cnt] == '-':
+            cnt = cnt + 1
+        else:
+            holdings = np.zeros(N_PIECES)
+
+            while True:
+                idx = PIECE_MAP.find(fen[cnt])
+                if idx == -1:
+                    break
+                holdings[idx] = holdings[idx] + 1
+                cnt = cnt + 1
+
+            for idx in range(N_PIECES):
+                if holdings[idx] > 0:
+                    if player == 0:
+                        iplanes[:,  :,    idx   + N_PIECES] = holdings[idx] / 50.0
+                    else:
+                        iplanes[:,  :,  (idx^1) + N_PIECES] = holdings[idx] / 50.0
+        cnt = cnt + 2
+
 def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
-    if USE_EPD:
+    if USE_EPD and AUX_INP:
         bb = chess.Board()
 
     for id,line in enumerate(examples):
 
         words = line.strip().split()
 
+        epd = ''
+
         if USE_EPD:
-            epd = ''
             for i in range(0, 6):
                 epd = epd + words[i] + ' '
+
+            #player
+            if words[1] == 'b':
+                player = 1
+            else:
+                player = 0
 
             # parse result
             svalue = words[6]
@@ -124,11 +184,13 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
             nmoves = int(words[8])
 
             #set board
-            bb.set_epd(epd)
+            if USE_EPD and AUX_INP:
+                bb.set_epd(epd)
             
             #flip board
-            if bb.turn == chess.BLACK:
-                bb = bb.mirror()
+            if player == 1:
+                if USE_EPD and AUX_INP:
+                    bb = bb.mirror()
                 result = 2 - result
                 value = 1 - value
 
@@ -174,7 +236,10 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
 
         #input planes
         if USE_EPD:
-            fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
+            if AUX_INP:
+                fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
+            else:
+                fill_planes_fen(iplane[id,:,:,:],epd,player)
         else:
             st=offset+nmoves*2
 
@@ -397,6 +462,7 @@ def main(argv):
     global VALUE_TARGET
     global NBATCH
     global BATCH_SIZE
+    global PIECE_MAP
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -427,6 +493,7 @@ def main(argv):
     parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
     parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
     parser.add_argument('--value-target',dest='value_target', required=False, type=int, default=VALUE_TARGET, help='Value target 0=z, 1=q and 2=(q+z)/2.')
+    parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
 
     args = parser.parse_args()
 
@@ -449,6 +516,7 @@ def main(argv):
     NPOLICY = args.npolicy
     AUX_INP = args.noauxinp
     VALUE_TARGET = args.value_target
+    PIECE_MAP = args.pcmap
 
     chunk = args.id
 

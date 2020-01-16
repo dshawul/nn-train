@@ -40,6 +40,7 @@ TRNFLG=--epd
 NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
+PIECE_MAP="KQRBNPkqrbnp"
 
 #nets directory
 WORK_ID=6
@@ -261,7 +262,7 @@ rungames() {
 train() {
     python src/train.py \
        --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
-       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
+       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
 }
