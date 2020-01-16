@@ -242,7 +242,7 @@ class NNet():
 
     def compile_model(self,args):
         if args.opt == 0:
-            self.opt = optimizers.SGD(lr=self.lr)
+            self.opt = optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
         else:
             self.opt = optimizers.Adam(lr=self.lr)
             
