@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import os
 import logging
@@ -282,7 +283,7 @@ def build_model(cid,policy):
     elif cid == 4:
         return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 40, 256, policy, NPOLICY, auxinp)
     else:
-        print "Unsupported network id (Use 0 to 4)."
+        print("Unsupported network id (Use 0 to 4).")
         sys.exit()
 
 class NNet():
@@ -323,7 +324,7 @@ class NNet():
                   metrics=['accuracy'])
 
     def train(self,examples):
-        print "Generating input planes using", self.cores, "cores"
+        print("Generating input planes using", self.cores, "cores")
         start_t = time.time()
 
         N = len(examples)
@@ -354,7 +355,7 @@ class NNet():
             ) for sl in slices )
 
         end_t = time.time()
-        print "Time", int(end_t - start_t), "sec"
+        print("Time", int(end_t - start_t), "sec")
         
         vweights = None
         pweights = None
@@ -363,7 +364,7 @@ class NNet():
             pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0)
 
         for i in range(len(self.model)):
-            print "Fitting model",i
+            print("Fitting model",i)
             if AUX_INP:
                 xi = [ipln,ipar]
             else:
@@ -406,7 +407,7 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
 
         examples = []
         start_t = time.time()
-        print "Collecting data"
+        print("Collecting data")
 
         while True:
 
@@ -435,8 +436,8 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                    else:
                         break
 
-                print "Time", int(end_t - start_t), "sec"
-                print "Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr
+                print("Time", int(end_t - start_t), "sec")
+                print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
                 myNet.train(examples)
                 if chunk % myNet.rsavo == 0:
                     myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, True)
@@ -445,7 +446,7 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
 
                 examples = []
                 start_t = time.time()
-                print "Collecting data" 
+                print("Collecting data")
 
             #break out
             if not line:
@@ -521,11 +522,11 @@ def main(argv):
     chunk = args.id
 
     start_t = time.time()
-    print "Loadng networks"
+    print("Loadng networks")
     myNet.load_checkpoint(args.dir,"ID-" + str(chunk), args)
     myNet.compile_model(args)
     end_t = time.time()
-    print "Time", int(end_t - start_t), "sec"
+    print("Time", int(end_t - start_t), "sec")
 
     if args.rand:
         myNet.save_checkpoint(args.dir,"ID-" + str(chunk), args, False)
