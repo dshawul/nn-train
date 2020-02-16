@@ -11,11 +11,6 @@ import numpy as np
 import multiprocessing
 from joblib import Parallel, delayed, dump, load
 
-from keras.models import load_model
-from keras import optimizers
-from keras import backend as K
-from keras.backend.tensorflow_backend import set_session
-from keras.utils import to_categorical, multi_gpu_model
 import tensorflow as tf
 
 AUX_INP = True
@@ -298,30 +293,33 @@ class NNet():
         self.pol_w = args.pol_w
         self.val_w = args.val_w
         self.pol_grad = args.pol_grad
+        self.mirrored_strategy = tf.distribute.MirroredStrategy()
 
     def new_model(self,cid,args):
         if args.gpus > 1:
-            with tf.device('/cpu:0'):
+            with self.mirrored_strategy.scope():
                 return build_model(cid, args.policy)
         else:
             return build_model(cid, args.policy)
 
     def compile_model(self,args):
         if args.opt == 0:
-            self.opt = optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
+            self.opt = tf.keras.optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
         else:
-            self.opt = optimizers.Adam(lr=self.lr)
+            self.opt = tf.keras.optimizers.Adam(lr=self.lr)
             
-        self.model = []
-        for i in range(len(self.cpu_model)):
+        for i in range(len(self.model)):
             if args.gpus > 1:
-                self.model.append( multi_gpu_model(self.cpu_model[i], gpus=args.gpus) )
+                with self.mirrored_strategy.scope():
+                    self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
+                          loss_weights = [self.val_w,self.pol_w],
+                          optimizer=self.opt,
+                          metrics=['accuracy'])
             else:
-                self.model.append( self.cpu_model[i] )
-            self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
-                  loss_weights = [self.val_w,self.pol_w],
-                  optimizer=self.opt,
-                  metrics=['accuracy'])
+                self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
+                      loss_weights = [self.val_w,self.pol_w],
+                      optimizer=self.opt,
+                      metrics=['accuracy'])
 
     def train(self,examples):
         print("Generating input planes using", self.cores, "cores")
@@ -388,17 +386,17 @@ class NNet():
             os.mkdir(folder)
         for i,n in enumerate(args.nets):
             fname = filepath  + "-model-" + str(n)
-            self.cpu_model[i].save(fname, include_optimizer=iopt)
+            self.model[i].save(fname, include_optimizer=iopt, save_format='h5')
 
     def load_checkpoint(self, folder, filename, args):
         filepath = os.path.join(folder, filename)
-        self.cpu_model = []
+        self.model = []
         for n in args.nets:
             fname = filepath  + "-model-" + str(n)
             if not os.path.exists(fname):
-                self.cpu_model.append( self.new_model(n,args) )
+                self.model.append( self.new_model(n,args) )
             else:
-                self.cpu_model.append( load_model(fname) )
+                self.model.append( tf.keras.models.load_model(fname) )
 
 def train_epd(myNet,args,myEpd,zipped=0,start=1):
 
@@ -498,12 +496,13 @@ def main(argv):
 
     args = parser.parse_args()
 
-    # allow memory growth
-    logging.getLogger('tensorflow').disabled=True
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    sess = tf.Session(config=config)
-    set_session(sess)
+    tf.keras.backend.set_learning_phase(1)
+
+    #memory growth of gpus
+    if args.gpus:
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
 
     # init net
     myNet = NNet(args)

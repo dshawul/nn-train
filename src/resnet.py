@@ -1,5 +1,5 @@
-from keras.models import Model
-from keras.layers import (
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (
     Input,
     Activation,
     Conv2D,
@@ -10,7 +10,7 @@ from keras.layers import (
     Concatenate,
     Reshape
 )
-from keras.regularizers import l2
+from tensorflow.keras.regularizers import l2
 
 CHANNEL_AXIS = 3
 
@@ -20,7 +20,10 @@ def conv_bn_relu(x, filters, size, name):
                   use_bias=False,
                   kernel_initializer="he_normal",
                   kernel_regularizer=l2(1.e-4),name=name+"_conv")(x)
-    x = BatchNormalization(axis=CHANNEL_AXIS,epsilon=1e-5,name=name+"_bnorm")(x)
+    x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
+                  fused=True, scale=False, center=True,
+                  virtual_batch_size=None,
+                  name=name+"_bnorm")(x)
     x = Activation('relu',name=name+"_relu")(x)
     return x
 

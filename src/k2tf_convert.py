@@ -30,10 +30,11 @@ import os
 import os.path as osp
 import argparse
 
-import tensorflow as tf
-
-from keras.models import load_model
-from keras import backend as K
+try:
+    import tensorflow.compat.v1 as tf
+    tf.disable_v2_behavior()
+except ImportError:
+    import tensorflow as tf
 
 def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
     """
@@ -50,7 +51,6 @@ def freeze_session(session, keep_var_names=None, output_names=None, clear_device
     @param clear_devices Remove the device directives from the graph for better portability.
     @return The frozen graph definition.
     """
-    from tensorflow.python.framework.graph_util import convert_variables_to_constants
     graph = session.graph
     with graph.as_default():
         freeze_var_names = list(set(v.op.name for v in tf.global_variables()).difference(keep_var_names or []))
@@ -60,7 +60,7 @@ def freeze_session(session, keep_var_names=None, output_names=None, clear_device
         if clear_devices:
             for node in input_graph_def.node:
                 node.device = ""
-        frozen_graph = convert_variables_to_constants(session, input_graph_def,
+        frozen_graph = tf.graph_util.convert_variables_to_constants(session, input_graph_def,
                                                       output_names, freeze_var_names)
         return frozen_graph
 
@@ -77,14 +77,16 @@ def convertGraph( modelPath, outdir, numoutputs, prefix, name):
     Returns:
         None
     '''
-    
+
+    from tensorflow.python.framework import graph_io
+
+    tf.keras.backend.set_learning_phase(0)
+
     #NOTE: If using Python > 3.2, this could be replaced with os.makedirs( name, exist_ok=True )
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
 
-    K.set_learning_phase(0)
-
-    net_model = load_model(modelPath, {'tf': tf})
+    net_model = tf.keras.models.load_model(modelPath)
 
     # Alias the outputs in the model - this sometimes makes them easier to access in TF
     pred = [None]*numoutputs
@@ -94,18 +96,17 @@ def convertGraph( modelPath, outdir, numoutputs, prefix, name):
         pred[i] = tf.identity(net_model.outputs[i], name=pred_node_names[i])
     print('Output nodes names are: ', pred_node_names)
 
-    sess = K.get_session()
+    sess = tf.keras.backend.get_session()
     
     # Write the graph in human readable
-    f = 'graph_def_for_reference.pb.ascii'
-    tf.train.write_graph(sess.graph.as_graph_def(), outdir, f, as_text=True)
-    print('Saved the graph definition in ascii format at: ', osp.join(outdir, f))
+    aname = 'graph_def_for_reference.pb.ascii'
+    graph_io.write_graph(sess.graph.as_graph_def(), outdir, aname, as_text=True)
+    print('Saved the graph definition in ascii format at: ', osp.join(outdir, aname))
 
     #freeze graph
     constant_graph = freeze_session(sess, output_names=pred_node_names)
 
     # Write the graph in binary .pb file
-    from tensorflow.python.framework import graph_io
     graph_io.write_graph(constant_graph, outdir, name, as_text=False)
     print('Saved the constant graph (ready for inference) at: ', osp.join(outdir, name))
 
