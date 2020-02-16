@@ -416,15 +416,18 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             if count < start:
                 continue
 
+            # add to examples
+            if line:
+                examples.append(line)
+            else:
+                count = count - 1
+
             #train network
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
-                if not line:
-                   count = count - 1
-                   if count % EPD_CHUNK_SIZE == 0:
-                      break;
-
                 chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
                 end_t = time.time()
+                
+                #make sure size is divisible by BATCH_SIZE
                 if (not line) and (count % BATCH_SIZE != 0): 
                    count = (count//BATCH_SIZE)*BATCH_SIZE
                    if count > 0:
@@ -447,9 +450,6 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
             #break out
             if not line:
                 break
-
-            # add to examples
-            examples.append(line)
 
 def main(argv):
     global USE_EPD
