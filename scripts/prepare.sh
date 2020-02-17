@@ -9,7 +9,8 @@ else
    RN=$3
 fi
 for i in $RN; do
-   $SDIR/convert-to-pb.sh ${NDIR}/ID-$2-model-$i; convert-to-uff $NDIR/ID-$2-model-$i.pb -O $V -O $P
+   $SDIR/convert-to-pb.sh ${NDIR}/ID-$2-model-$i ${NDIR}/infer-$i
+   convert-to-uff $NDIR/ID-$2-model-$i.pb -O $V -O $P
 done
 if [ -z "$3" ]; then
   cp ${NDIR}/ID-$2-model-0.pb ${NDIR}/net-2x32.pb
