@@ -384,7 +384,7 @@ class NNet():
         for layer1,layer2 in zip(m1.layers,m2.layers):
             w1 = layer1.get_weights()
             w2 = layer2.get_weights()
-            for k in range(len(w1)):
+            for k in range(len(w2)):
                 w2[k] = w1[k].reshape(w2[k].shape)
             layer2.set_weights(w2)
 

@@ -14,6 +14,11 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.backend import learning_phase
 
 CHANNEL_AXIS = 3
+V_BATCH_SIZE = 64
+RENORM = True
+RENORM_RMAX = 1.0
+RENORM_DMAX = 0.0
+RENORM_MOM  = 0.99
 
 def conv_bn_relu(x, filters, size, name):
 
@@ -26,9 +31,20 @@ def conv_bn_relu(x, filters, size, name):
 
     #batch normalization
     if learning_phase() == 1:
-        x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-            fused=False, scale=False, center=True,
-            virtual_batch_size=64, name=name+"_bnorm")(x)
+        if RENORM:
+            clipping = {
+                "rmin": 1.0 / RENORM_RMAX,
+                "rmax": RENORM_RMAX,
+                "dmax": RENORM_DMAX
+            }
+            x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
+                fused=False, scale=False, center=True,
+                renorm=True, renorm_clipping=clipping,renorm_momentum=RENORM_MOM,
+                virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
+        else:
+            x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
+                fused=False, scale=False, center=True,
+                virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
     else:
         x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
             fused=True, scale=False, center=True,
