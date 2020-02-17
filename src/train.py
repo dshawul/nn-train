@@ -380,23 +380,50 @@ class NNet():
                       validation_split=self.vald_split,
                       epochs=self.epochs)
 
+    def copy_weights(self,m1,m2):
+        for layer1,layer2 in zip(m1.layers,m2.layers):
+            w1 = layer1.get_weights()
+            w2 = layer2.get_weights()
+            for k in range(len(w1)):
+                w2[k] = w1[k].reshape(w2[k].shape)
+            layer2.set_weights(w2)
+
     def save_checkpoint(self, folder, filename, args, iopt=False):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
+
+        #save each model
         for i,n in enumerate(args.nets):
             fname = filepath  + "-model-" + str(n)
-            self.model[i].save(fname, include_optimizer=iopt, save_format='h5')
+
+            #copy weights
+            self.copy_weights(self.model[i], self.infer_model[i])
+
+            #save model
+            self.infer_model[i].save(fname, include_optimizer=iopt, save_format='h5')
 
     def load_checkpoint(self, folder, filename, args):
         filepath = os.path.join(folder, filename)
+
+        #create training model
         self.model = []
         for n in args.nets:
             fname = filepath  + "-model-" + str(n)
-            if not os.path.exists(fname):
-                self.model.append( self.new_model(n,args) )
-            else:
-                self.model.append( tf.keras.models.load_model(fname) )
+            new_model = self.new_model(n,args)
+
+            if os.path.exists(fname):
+                saved_model = tf.keras.models.load_model(fname)
+                self.copy_weights(saved_model, new_model)
+
+            self.model.append( new_model )
+
+        #create inference model
+        tf.keras.backend.set_learning_phase(0)
+        self.infer_model = []
+        for n in args.nets:
+            self.infer_model.append( self.new_model(n,args) )
+        tf.keras.backend.set_learning_phase(1)
 
 def train_epd(myNet,args,myEpd,zipped=0,start=1):
 

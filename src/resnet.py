@@ -11,20 +11,32 @@ from tensorflow.keras.layers import (
     Reshape
 )
 from tensorflow.keras.regularizers import l2
+from tensorflow.keras.backend import learning_phase
 
 CHANNEL_AXIS = 3
 
 def conv_bn_relu(x, filters, size, name):
+
+    #convolution
     x = Conv2D(filters=filters, kernel_size=size,
                   strides=(1,1), padding="same",
                   use_bias=False,
                   kernel_initializer="he_normal",
                   kernel_regularizer=l2(1.e-4),name=name+"_conv")(x)
-    x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-                  fused=True, scale=False, center=True,
-                  virtual_batch_size=None,
-                  name=name+"_bnorm")(x)
+
+    #batch normalization
+    if learning_phase() == 1:
+        x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
+            fused=False, scale=False, center=True,
+            virtual_batch_size=64, name=name+"_bnorm")(x)
+    else:
+        x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
+            fused=True, scale=False, center=True,
+            name=name+"_bnorm")(x)
+
+    #activation
     x = Activation('relu',name=name+"_relu")(x)
+
     return x
 
 def build_a0net(x, blocks,filters, policy):
