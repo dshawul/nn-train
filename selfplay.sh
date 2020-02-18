@@ -28,6 +28,7 @@ NOISE_FRAC=25      # Fraction of Dirchilet noise
 POL_GRAD=0         # Use policy gradient algo.
 POL_WEIGHT=2       # Policy weight
 VAL_WEIGHT=1       # Value weight
+RSAVO=16           # Save weights with optimization after this many chunks
 
 #Network parameters
 BOARDX=8
@@ -261,7 +262,7 @@ rungames() {
 #train network
 train() {
     python src/train.py \
-       --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
+       --dir ${NETS_DIR} ${TRNFLG} ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
        --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
        --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}

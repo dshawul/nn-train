@@ -452,17 +452,18 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                    else:
                         break
 
-                print("Time", int(end_t - start_t), "sec")
-                print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                myNet.train(examples)
-                if chunk % args.rsavo == 0:
-                    myNet.save_checkpoint("ID-" + str(chunk), args, True)
-                elif chunk % args.rsav == 0:
-                    myNet.save_checkpoint("ID-" + str(chunk), args, False)
+                if len(examples) > 0:
+                    print("Time", int(end_t - start_t), "sec")
+                    print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
+                    myNet.train(examples)
+                    if chunk % args.rsavo == 0:
+                        myNet.save_checkpoint("ID-" + str(chunk), args, True)
+                    elif chunk % args.rsav == 0:
+                        myNet.save_checkpoint("ID-" + str(chunk), args, False)
 
-                examples = []
-                start_t = time.time()
-                print("Collecting data")
+                    examples = []
+                    start_t = time.time()
+                    print("Collecting data")
 
             #break out
             if not line:
