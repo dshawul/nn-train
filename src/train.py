@@ -1,7 +1,5 @@
 from __future__ import print_function
 import sys
-import os
-import logging
 import time
 import chess
 import resnet
@@ -11,8 +9,16 @@ import numpy as np
 import multiprocessing
 from joblib import Parallel, delayed, dump, load
 
+#import tensorflow and set logging level
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+try:
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+except:
+    pass
 
+#global params
 AUX_INP = True
 CHANNELS = 24
 BOARDX = 8

@@ -29,9 +29,12 @@ SOFTWARE.
 import os
 import argparse
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 try:
     import tensorflow.compat.v1 as tf
     tf.disable_v2_behavior()
+    tf.logging.set_verbosity(tf.logging.ERROR)
 except ImportError:
     import tensorflow as tf
 
