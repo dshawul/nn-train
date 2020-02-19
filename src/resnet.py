@@ -38,16 +38,16 @@ def conv_bn_relu(x, filters, size, name):
                 "dmax": RENORM_DMAX
             }
             x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-                fused=False, scale=False, center=True,
+                fused=False, scale=True, center=True,
                 renorm=True, renorm_clipping=clipping,renorm_momentum=RENORM_MOM,
                 virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
         else:
             x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-                fused=(V_BATCH_SIZE == None), scale=False, center=True,
+                fused=(V_BATCH_SIZE == None), scale=True, center=True,
                 virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
     else:
         x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-            fused=True, scale=False, center=True,
+            fused=True, scale=True, center=True,
             name=name+"_bnorm")(x)
 
     #activation
