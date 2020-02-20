@@ -299,34 +299,33 @@ class NNet():
         self.pol_grad = args.pol_grad
         self.mirrored_strategy = tf.distribute.MirroredStrategy()
 
-    def new_model(self,cid,args):
+    def new_model(self,idx,args):
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                return build_model(cid, args.policy)
+                return build_model(idx, args.policy)
         else:
-            return build_model(cid, args.policy)
+            return build_model(idx, args.policy)
 
-    def compile_model(self,args):
+    def compile_model(self,mdx,args):
         if args.opt == 0:
-            self.opt = tf.keras.optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
+            opt = tf.keras.optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
         else:
-            self.opt = tf.keras.optimizers.Adam(lr=self.lr)
+            opt = tf.keras.optimizers.Adam(lr=self.lr)
 
         if args.mixed:
-            self.opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(self.opt)
+            opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
-        for i in range(len(self.model)):
-            if args.gpus > 1:
-                with self.mirrored_strategy.scope():
-                    self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
-                          loss_weights = [self.val_w,self.pol_w],
-                          optimizer=self.opt,
-                          metrics=['accuracy'])
-            else:
-                self.model[i].compile(loss=['categorical_crossentropy','categorical_crossentropy'],
+        if args.gpus > 1:
+            with self.mirrored_strategy.scope():
+                mdx.compile(loss=['categorical_crossentropy','categorical_crossentropy'],
                       loss_weights = [self.val_w,self.pol_w],
-                      optimizer=self.opt,
+                      optimizer=opt,
                       metrics=['accuracy'])
+        else:
+            mdx.compile(loss=['categorical_crossentropy','categorical_crossentropy'],
+                  loss_weights = [self.val_w,self.pol_w],
+                  optimizer=opt,
+                  metrics=['accuracy'])
 
     def train(self,examples):
         print("Generating input planes using", self.cores, "cores")
@@ -405,9 +404,17 @@ class NNet():
         for n in args.nets:
             fname = filepath  + "-model-" + str(n)
             if not os.path.exists(fname):
-                self.model.append( self.new_model(n,args) )
+                mdx = self.new_model(n,args)
+                self.compile_model(mdx, args)
             else:
-                self.model.append( tf.keras.models.load_model(fname) )
+                if chunk % args.rsavo == 0:
+                    mdx = tf.keras.models.load_model(fname)
+                else:
+                    mdx = tf.keras.models.load_model(fname, compile=False)
+                if not mdx.optimizer:
+                    print("====== ", fname, " : starting from fresh optimizer state ======")
+                    self.compile_model(mdx, args)
+            self.model.append( mdx )
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
@@ -553,7 +560,6 @@ def main(argv):
     print("Loadng networks")
     myNet.save_infer_graph(args)
     myNet.load_checkpoint(chunk, args)
-    myNet.compile_model(args)
     end_t = time.time()
     print("Time", int(end_t - start_t), "sec")
 
