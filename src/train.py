@@ -311,7 +311,10 @@ class NNet():
             self.opt = tf.keras.optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
         else:
             self.opt = tf.keras.optimizers.Adam(lr=self.lr)
-            
+
+        if args.mixed:
+            self.opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(self.opt)
+
         for i in range(len(self.model)):
             if args.gpus > 1:
                 with self.mirrored_strategy.scope():
@@ -518,6 +521,7 @@ def main(argv):
     parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
     parser.add_argument('--value-target',dest='value_target', required=False, type=int, default=VALUE_TARGET, help='Value target 0=z, 1=q and 2=(q+z)/2.')
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
+    parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
 
     args = parser.parse_args()
 
