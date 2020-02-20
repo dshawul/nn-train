@@ -387,8 +387,8 @@ class NNet():
                       validation_split=self.vald_split,
                       epochs=self.epochs)
 
-    def save_checkpoint(self, filename, args, iopt=False):
-        filepath = os.path.join(args.dir, filename)
+    def save_checkpoint(self, chunk, args, iopt=False):
+        filepath = os.path.join(args.dir, "ID-" + str(chunk))
         if not os.path.exists(args.dir):
             os.mkdir(args.dir)
 
@@ -397,8 +397,8 @@ class NNet():
             fname = filepath  + "-model-" + str(n)
             self.model[i].save(fname, include_optimizer=iopt, save_format='h5')
 
-    def load_checkpoint(self, filename, args):
-        filepath = os.path.join(args.dir, filename)
+    def load_checkpoint(self, chunk, args):
+        filepath = os.path.join(args.dir, "ID-" + str(chunk))
 
         #create training model
         self.model = []
@@ -425,9 +425,9 @@ class NNet():
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(1)
 
-def train_epd(myNet,args,myEpd,zipped=0,start=1):
+def train_epd(myNet,args,myEpd,start=1):
 
-    with (open(myEpd) if not zipped else gzip.open(myEpd)) as file:
+    with (open(myEpd) if not args.gzip else gzip.open(myEpd)) as file:
         count = 0
 
         examples = []
@@ -466,9 +466,9 @@ def train_epd(myNet,args,myEpd,zipped=0,start=1):
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
                     myNet.train(examples)
                     if chunk % args.rsavo == 0:
-                        myNet.save_checkpoint("ID-" + str(chunk), args, True)
+                        myNet.save_checkpoint(chunk, args, True)
                     elif chunk % args.rsav == 0:
-                        myNet.save_checkpoint("ID-" + str(chunk), args, False)
+                        myNet.save_checkpoint(chunk, args, False)
 
                     examples = []
                     start_t = time.time()
@@ -552,13 +552,13 @@ def main(argv):
     start_t = time.time()
     print("Loadng networks")
     myNet.save_infer_graph(args)
-    myNet.load_checkpoint("ID-" + str(chunk), args)
+    myNet.load_checkpoint(chunk, args)
     myNet.compile_model(args)
     end_t = time.time()
     print("Time", int(end_t - start_t), "sec")
 
     if args.rand:
-        myNet.save_checkpoint("ID-" + str(chunk), args)
+        myNet.save_checkpoint(chunk, args)
     elif (args.epd != None) or (args.trn != None):
         folder = './joblib_memmap'
         if not os.path.isdir(folder):
@@ -567,10 +567,10 @@ def main(argv):
         start = chunk * EPD_CHUNK_SIZE + 1
         if args.epd != None:
             USE_EPD = True
-            train_epd(myNet, args, args.epd, args.gzip, start)
+            train_epd(myNet, args, args.epd, start)
         else:
             USE_EPD = False
-            train_epd(myNet, args, args.trn, args.gzip, start)
+            train_epd(myNet, args, args.trn, start)
 
 
 if __name__ == "__main__":
