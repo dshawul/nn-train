@@ -15,7 +15,7 @@ from tensorflow.keras.backend import learning_phase
 
 CHANNEL_AXIS = 3
 V_BATCH_SIZE = None
-RENORM = True
+RENORM = False
 RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
