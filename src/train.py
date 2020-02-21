@@ -556,9 +556,19 @@ def main(argv):
 
     chunk = args.id
 
-    start_t = time.time()
-    print("Loadng networks")
+    #save inference graphs
     myNet.save_infer_graph(args)
+
+    #initialize mixed precision training
+    if args.mixed:
+        config = tf.compat.v1.ConfigProto()
+        config.graph_options.rewrite_options.auto_mixed_precision = True
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
+
+    #load networks
+    print("Loadng networks")
+    start_t = time.time()
     myNet.load_checkpoint(chunk, args)
     end_t = time.time()
     print("Time", int(end_t - start_t), "sec")
