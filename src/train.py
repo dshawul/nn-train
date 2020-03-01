@@ -289,14 +289,6 @@ def build_model(cid,policy):
 
 class NNet():
     def __init__(self,args):
-        self.epochs = args.epochs
-        self.lr = args.lr
-        self.vald_split = args.vald_split
-        self.cores = args.cores
-        self.nets = args.nets
-        self.pol_w = args.pol_w
-        self.val_w = args.val_w
-        self.pol_grad = args.pol_grad
         self.mirrored_strategy = tf.distribute.MirroredStrategy()
 
     def new_model(self,idx,args):
@@ -308,9 +300,9 @@ class NNet():
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
-            opt = tf.keras.optimizers.SGD(lr=self.lr,momentum=0.9,nesterov=True)
+            opt = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,nesterov=True)
         else:
-            opt = tf.keras.optimizers.Adam(lr=self.lr)
+            opt = tf.keras.optimizers.Adam(lr=args.lr)
 
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
@@ -318,17 +310,17 @@ class NNet():
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
                 mdx.compile(loss=['categorical_crossentropy','categorical_crossentropy'],
-                      loss_weights = [self.val_w,self.pol_w],
+                      loss_weights = [args.val_w,args.pol_w],
                       optimizer=opt,
                       metrics=['accuracy'])
         else:
             mdx.compile(loss=['categorical_crossentropy','categorical_crossentropy'],
-                  loss_weights = [self.val_w,self.pol_w],
+                  loss_weights = [args.val_w,args.pol_w],
                   optimizer=opt,
                   metrics=['accuracy'])
 
-    def train(self,examples):
-        print("Generating input planes using", self.cores, "cores")
+    def train(self,examples,args):
+        print("Generating input planes using", args.cores, "cores")
         start_t = time.time()
 
         N = len(examples)
@@ -352,9 +344,9 @@ class NNet():
         oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,3),mode='w+')
 
         #multiprocess
-        nlen = N / self.cores
-        slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(self.cores) ]
-        Parallel(n_jobs=self.cores)( delayed(fill_examples) (                      \
+        nlen = N / args.cores
+        slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
+        Parallel(n_jobs=args.cores)( delayed(fill_examples) (                      \
             examples[sl],ipln[sl,:,:,:],ipar[sl,:],opol[sl,:],ores[sl],oval[sl,:]  \
             ) for sl in slices )
 
@@ -363,7 +355,7 @@ class NNet():
         
         vweights = None
         pweights = None
-        if self.pol_grad > 0:
+        if args.pol_grad > 0:
             vweights = np.ones(ores.size)
             pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0)
 
@@ -374,17 +366,17 @@ class NNet():
             else:
                 xi = [ipln]
 
-            if self.pol_grad > 0:
+            if args.pol_grad > 0:
                 self.model[i].fit(x = xi, y = [oval, opol],
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
-                      validation_split=self.vald_split,
-                      epochs=self.epochs)
+                      validation_split=args.vald_split,
+                      epochs=args.epochs)
             else:
                 self.model[i].fit(x = xi, y = [oval, opol],
                       batch_size=BATCH_SIZE,
-                      validation_split=self.vald_split,
-                      epochs=self.epochs)
+                      validation_split=args.vald_split,
+                      epochs=args.epochs)
 
     def save_checkpoint(self, chunk, args, iopt=False):
         filepath = os.path.join(args.dir, "ID-" + str(chunk))
@@ -471,7 +463,7 @@ def train_epd(myNet,args,myEpd,start=1):
                 if len(examples) > 0:
                     print("Time", int(end_t - start_t), "sec")
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                    myNet.train(examples)
+                    myNet.train(examples,args)
                     if chunk % args.rsavo == 0:
                         myNet.save_checkpoint(chunk, args, True)
                     elif chunk % args.rsav == 0:
