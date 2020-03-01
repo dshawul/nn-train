@@ -499,7 +499,7 @@ def main(argv):
     parser.add_argument('--nbatch',dest='nbatch', required=False, type=int, default=NBATCH, help='Number of batches to process at one time.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
-    parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.0, help='Fraction of sample to use for validation.')
+    parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.125, help='Fraction of sample to use for validation.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
