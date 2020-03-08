@@ -20,7 +20,7 @@ RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
 
-def conv_bn_relu(x, filters, size, name):
+def conv_bn_relu(x, filters, size, scale, name):
 
     #convolution
     x = Conv2D(filters=filters, kernel_size=size,
@@ -38,16 +38,16 @@ def conv_bn_relu(x, filters, size, name):
                 "dmax": RENORM_DMAX
             }
             x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-                fused=False, scale=True, center=True,
+                fused=False, scale=scale, center=True,
                 renorm=True, renorm_clipping=clipping,renorm_momentum=RENORM_MOM,
                 virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
         else:
             x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-                fused=(V_BATCH_SIZE == None), scale=True, center=True,
+                fused=(V_BATCH_SIZE == None), scale=scale, center=True,
                 virtual_batch_size=V_BATCH_SIZE, name=name+"_bnorm")(x)
     else:
         x = BatchNormalization(axis=CHANNEL_AXIS, epsilon=1e-5,
-            fused=True, scale=True, center=True,
+            fused=True, scale=scale, center=True,
             name=name+"_bnorm")(x)
 
     #activation
@@ -57,24 +57,24 @@ def conv_bn_relu(x, filters, size, name):
 
 def build_a0net(x, blocks,filters, policy):
     #Convolution block
-    x = conv_bn_relu(x,filters,3,"input")
+    x = conv_bn_relu(x,filters,3,True,"input")
 
     #Residual blocks
     for i in range(blocks-1):
         inp = x
-        x = conv_bn_relu(x,filters,3,"res"+str(i+1)+"_1")
-        x = conv_bn_relu(x,filters,3,"res"+str(i+1)+"_2")
+        x = conv_bn_relu(x,filters,3,False,"res"+str(i+1)+"_1")
+        x = conv_bn_relu(x,filters,3,True,"res"+str(i+1)+"_2")
         x = Add(name="shortcut_"+str(i))([x,inp])
 
     #value head
-    vx = conv_bn_relu(x,1,1,"value")
+    vx = conv_bn_relu(x,1,1,False,"value")
 
     #policy head
     if policy == 1:
-        px = conv_bn_relu(x,filters,3,"policy_1")
-        px = conv_bn_relu(px,73,1,"policy_2")
+        px = conv_bn_relu(x,filters,3,False,"policy_1")
+        px = conv_bn_relu(px,73,1,True,"policy_2")
     else:
-        px = conv_bn_relu(x,4,1,"policy_1")
+        px = conv_bn_relu(x,4,1,False,"policy_1")
 
     return vx,px
 
