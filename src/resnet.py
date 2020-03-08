@@ -8,7 +8,10 @@ from tensorflow.keras.layers import (
     Flatten,
     Add,
     Concatenate,
-    Reshape
+    Reshape,
+    GlobalAveragePooling2D,
+    Multiply,
+    Permute
 )
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.backend import learning_phase
@@ -19,8 +22,26 @@ RENORM = False
 RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
+USE_SE = False
 L2_REG = l2(1.e-4)
 K_INIT = "glorot_normal"
+
+def squeeze_excite_block(inp, filters, ratio, name):
+    """Channels scaling with squeeze and excitation
+    """
+    inp = Permute((3,1,2),name=name+"_permute_1")(inp)
+    x = GlobalAveragePooling2D('channels_first',
+                  name=name+"_avg_pool")(inp)
+    x = Dense(filters // ratio, activation='relu', 
+                  kernel_regularizer=L2_REG, kernel_initializer=K_INIT, 
+                  use_bias=True,name=name+"_dense_1")(x)
+    x = Dense(filters, activation='sigmoid', 
+                  kernel_regularizer=L2_REG, kernel_initializer=K_INIT,
+                  use_bias=True,name=name+"_dense_2")(x)
+    x = Reshape((filters,1,1),name=name+"_reshape")(x)
+    x = Multiply(name=name+"_multiply")([inp,x])
+    x = Permute((2,3,1),name=name+"_permute_2")(x)
+    return x
 
 def conv_bn_relu(x, filters, size, scale, name):
 
@@ -64,6 +85,8 @@ def build_a0net(x, blocks,filters, policy):
     #Residual blocks
     for i in range(blocks-1):
         inp = x
+        if USE_SE:
+            x = squeeze_excite_block(x,filters,filters//32,"res"+str(i+1)+"_se")
         x = conv_bn_relu(x,filters,3,False,"res"+str(i+1)+"_1")
         x = conv_bn_relu(x,filters,3,True,"res"+str(i+1)+"_2")
         x = Add(name="shortcut_"+str(i))([x,inp])
