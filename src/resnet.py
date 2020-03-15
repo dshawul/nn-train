@@ -19,6 +19,8 @@ RENORM = False
 RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
+L2_REG = l2(1.e-4)
+K_INIT = "glorot_normal"
 
 def conv_bn_relu(x, filters, size, scale, name):
 
@@ -26,8 +28,8 @@ def conv_bn_relu(x, filters, size, scale, name):
     x = Conv2D(filters=filters, kernel_size=size,
                   strides=(1,1), padding="same",
                   use_bias=False,
-                  kernel_initializer="he_normal",
-                  kernel_regularizer=l2(1.e-4),name=name+"_conv")(x)
+                  kernel_initializer=K_INIT,
+                  kernel_regularizer=L2_REG,name=name+"_conv")(x)
 
     #batch normalization
     if learning_phase() == 1:
@@ -89,22 +91,32 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLIC
     vx,px = build_a0net(x, blocks, filters, policy)
 
     # value head
-    x = Flatten()(vx)
-    x = Dense(256, activation='relu')(x)
+    x = Flatten(name='value_flatten')(vx)
+    x = Dense(256, kernel_initializer=K_INIT, 
+        kernel_regularizer=L2_REG, activation='relu',
+        name='value_dense_1')(x)
 
     if auxinp:
         aux_input = Input(shape=aux_input_shape, name = 'aux_input')
         y = aux_input
-        y = Dense( 32, activation='relu')(y)
-        x = Concatenate()([x, y])
+        y = Dense( 32, kernel_initializer=K_INIT,
+            kernel_regularizer=L2_REG, activation='relu',
+            name='value_dense_2')(y)
+        x = Concatenate(name='value_concat')([x, y])
 
-    x = Dense( 32, activation='relu')(x)
-    value = Dense(3, activation='softmax', name='value')(x)
+    x = Dense( 32, kernel_initializer=K_INIT,
+        kernel_regularizer=L2_REG, activation='relu',
+        name='value_dense_3')(x)
+    value = Dense(3, kernel_initializer=K_INIT,
+        kernel_regularizer=L2_REG, activation='softmax',
+        name='value')(x)
 
     # policy head
     if policy == 0:
         x = Flatten('channels_first')(px)
-        policy = Dense(NPOLICY, activation='softmax', name='policy')(x)
+        policy = Dense(NPOLICY, kernel_initializer=K_INIT,
+            kernel_regularizer=L2_REG, activation='softmax',
+            name='policy')(x)
     else:
         x = Reshape((NPOLICY,), name='policy')(px)
         policy = Activation("softmax", name='policya')(x)
