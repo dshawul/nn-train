@@ -43,7 +43,7 @@ def squeeze_excite_block(inp, filters, ratio, name):
     x = Permute((2,3,1),name=name+"_permute_2")(x)
     return x
 
-def conv_bn_relu(x, filters, size, scale, name):
+def conv_bn_relu(x, filters, size, scale, name, act=True):
 
     #convolution
     x = Conv2D(filters=filters, kernel_size=size,
@@ -74,7 +74,8 @@ def conv_bn_relu(x, filters, size, scale, name):
             name=name+"_bnorm")(x)
 
     #activation
-    x = Activation('relu',name=name+"_relu")(x)
+    if act:
+        x = Activation('relu',name=name+"_relu")(x)
 
     return x
 
@@ -88,8 +89,9 @@ def build_a0net(x, blocks,filters, policy):
         if USE_SE:
             x = squeeze_excite_block(x,filters,filters//32,"res"+str(i+1)+"_se")
         x = conv_bn_relu(x,filters,3,False,"res"+str(i+1)+"_1")
-        x = conv_bn_relu(x,filters,3,True,"res"+str(i+1)+"_2")
+        x = conv_bn_relu(x,filters,3,True,"res"+str(i+1)+"_2",False)
         x = Add(name="shortcut_"+str(i))([x,inp])
+        x = Activation('relu',name="res"+str(i+1)+"shortcut_relu")(x)
 
     #value head
     vx = conv_bn_relu(x,1,1,False,"value")
