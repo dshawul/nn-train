@@ -23,36 +23,31 @@ RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
 USE_SE = False
+USE_PRE_ACTIVATION = True
 L2_REG = l2(1.e-4)
 K_INIT = "glorot_normal"
 
-def squeeze_excite_block(inp, filters, ratio, name):
-    """Channels scaling with squeeze and excitation
-    """
-    inp = Permute((3,1,2),name=name+"_permute_1")(inp)
-    x = GlobalAveragePooling2D('channels_first',
-                  name=name+"_avg_pool")(inp)
-    x = Dense(filters // ratio, activation='relu', 
-                  kernel_regularizer=L2_REG, kernel_initializer=K_INIT, 
-                  use_bias=True,name=name+"_dense_1")(x)
-    x = Dense(filters, activation='sigmoid', 
-                  kernel_regularizer=L2_REG, kernel_initializer=K_INIT,
-                  use_bias=True,name=name+"_dense_2")(x)
-    x = Reshape((filters,1,1),name=name+"_reshape")(x)
-    x = Multiply(name=name+"_multiply")([inp,x])
-    x = Permute((2,3,1),name=name+"_permute_2")(x)
+def dense(x, n, name, act='relu'):
+
+    x = Dense(n, activation=act,
+              kernel_regularizer=L2_REG,
+              kernel_initializer=K_INIT,
+              name=name)(x)
+
     return x
 
-def conv_bn_relu(x, filters, size, scale, name, act=True):
+def conv(x, filters, size, name):
 
-    #convolution
     x = Conv2D(filters=filters, kernel_size=size,
                   strides=(1,1), padding="same",
                   use_bias=False,
                   kernel_initializer=K_INIT,
                   kernel_regularizer=L2_REG,name=name+"_conv")(x)
 
-    #batch normalization
+    return x
+
+def batch_norm(x, scale, name):
+
     if learning_phase() == 1:
         if RENORM:
             clipping = {
@@ -73,75 +68,117 @@ def conv_bn_relu(x, filters, size, scale, name, act=True):
             fused=True, scale=scale, center=True,
             name=name+"_bnorm")(x)
 
-    #activation
-    if act:
-        x = Activation('relu',name=name+"_relu")(x)
+    return x
+
+def bn_relu(x, scale, name):
+
+    x = batch_norm(x, scale, name)
+    x = Activation('relu',name=name+"_relu")(x)
 
     return x
 
-def build_a0net(x, blocks,filters, policy):
-    #Convolution block
-    x = conv_bn_relu(x,filters,3,True,"input")
+def conv_bn(x, filters, size, scale, name):
 
-    #Residual blocks
+    x = conv(x, filters, size, name)
+    x = batch_norm(x, scale, name)
+
+    return x
+
+def conv_bn_relu(x, filters, size, scale, name):
+
+    x = conv(x, filters, size, name)
+    x = bn_relu(x, scale, name)
+
+    return x
+
+def bn_relu_conv(x, filters, size, scale, name):
+
+    x = bn_relu(x, scale, name)
+    x = conv(x, filters, size, name)
+
+    return x
+
+def squeeze_excite_block(inp, filters, ratio, name):
+
+    inp = Permute((3,1,2),name=name+"_permute_1")(inp)
+    x = GlobalAveragePooling2D('channels_first',
+                  name=name+"_avg_pool")(inp)
+    x = dense(x, filters // ratio, name+"_dense_1")
+    x = dense(x, filters, name+"_dense_2", act='sigmoid')
+    x = Reshape((filters,1,1),name=name+"_reshape")(x)
+    x = Multiply(name=name+"_multiply")([inp,x])
+    x = Permute((2,3,1),name=name+"_permute_2")(x)
+    return x
+
+def build_post_net(x, blocks,filters, policy):
+
     for i in range(blocks-1):
         inp = x
+        x = conv_bn_relu(x,filters,3,False,"res"+str(i+1)+"_1")
+        x = conv_bn(x,filters,3,True,"res"+str(i+1)+"_2")
         if USE_SE:
             x = squeeze_excite_block(x,filters,filters//32,"res"+str(i+1)+"_se")
-        x = conv_bn_relu(x,filters,3,False,"res"+str(i+1)+"_1")
-        x = conv_bn_relu(x,filters,3,True,"res"+str(i+1)+"_2",False)
         x = Add(name="shortcut_"+str(i))([x,inp])
-        x = Activation('relu',name="res"+str(i+1)+"shortcut_relu")(x)
+        x = Activation('relu',name="res"+str(i+1)+"_relu")(x)
 
-    #value head
-    vx = conv_bn_relu(x,1,1,False,"value")
+    return x
 
-    #policy head
+def build_pre_net(x, blocks,filters, policy):
+
+    for i in range(blocks-1):
+        inp = x
+        if i == 0:
+            x = conv(x,filters,3,"res"+str(i+1)+"_1")
+        else:
+            x = bn_relu_conv(x,filters,3,False,"res"+str(i+1)+"_1")
+        x = bn_relu_conv(x,filters,3,True,"res"+str(i+1)+"_2")
+        if USE_SE:
+            x = squeeze_excite_block(x,filters,filters//32,"res"+str(i+1)+"_se")
+        x = Add(name="shortcut_"+str(i))([x,inp])
+
+    x = bn_relu(x, True, "final")
+
+    return x
+
+def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLICY, auxinp):
+
+    main_input = Input(shape=main_input_shape, name='main_input')
+    x = main_input
+
+    # input convolution block
+    x = conv_bn_relu(x,filters,3,True,"input")
+
+    # residual tower
+    if USE_PRE_ACTIVATION:
+        x = build_pre_net(x, blocks, filters, policy)
+    else:
+        x = build_post_net(x, blocks, filters, policy)
+
+    # value and policy head convolutions
+    vx = conv_bn_relu(x,2,1,False,"value")
     if policy == 1:
         px = conv_bn_relu(x,filters,3,False,"policy_1")
         px = conv_bn_relu(px,73,1,True,"policy_2")
     else:
         px = conv_bn_relu(x,4,1,False,"policy_1")
 
-    return vx,px
-
-def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLICY, auxinp):
-    """Builds a custom ResNet like architecture.
-    """
-
-    main_input = Input(shape=main_input_shape, name='main_input')
-    x = main_input
-
-    # body
-    vx,px = build_a0net(x, blocks, filters, policy)
-
     # value head
     x = Flatten(name='value_flatten')(vx)
-    x = Dense(256, kernel_initializer=K_INIT, 
-        kernel_regularizer=L2_REG, activation='relu',
-        name='value_dense_1')(x)
+    x = dense(x, 128, "value_dense_1")
 
     if auxinp:
         aux_input = Input(shape=aux_input_shape, name = 'aux_input')
         y = aux_input
-        y = Dense( 32, kernel_initializer=K_INIT,
-            kernel_regularizer=L2_REG, activation='relu',
-            name='value_dense_2')(y)
+        y = dense(y, 32, "value_dense_2")
         x = Concatenate(name='value_concat')([x, y])
 
-    x = Dense( 32, kernel_initializer=K_INIT,
-        kernel_regularizer=L2_REG, activation='relu',
-        name='value_dense_3')(x)
-    value = Dense(3, kernel_initializer=K_INIT,
-        kernel_regularizer=L2_REG, activation='softmax',
-        name='value')(x)
+    x = dense(x, 32, "value_dense_3")
+    value = dense(x, 3, "value", act='softmax')
 
     # policy head
     if policy == 0:
         x = Flatten('channels_first')(px)
-        policy = Dense(NPOLICY, kernel_initializer=K_INIT,
-            kernel_regularizer=L2_REG, activation='softmax',
-            name='policy')(x)
+        policy = dense(x, NPOLICY, "policy", act='softmax')
     else:
         x = Reshape((NPOLICY,), name='policy')(px)
         policy = Activation("softmax", name='policya')(x)
