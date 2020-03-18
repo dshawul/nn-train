@@ -298,6 +298,13 @@ class NNet():
         else:
             return build_model(idx, args.policy)
 
+    def load_model(self,fname,compile,args):
+        if args.gpus > 1:
+            with self.mirrored_strategy.scope():
+                return tf.keras.models.load_model(fname, compile=compile)
+        else:
+            return tf.keras.models.load_model(fname, compile=compile)
+
     def compile_model(self,mdx,args):
         if args.opt == 0:
             opt = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,nesterov=True)
@@ -399,10 +406,8 @@ class NNet():
                 mdx = self.new_model(n,args)
                 self.compile_model(mdx, args)
             else:
-                if chunk % args.rsavo == 0:
-                    mdx = tf.keras.models.load_model(fname)
-                else:
-                    mdx = tf.keras.models.load_model(fname, compile=False)
+                comp = (chunk % args.rsavo == 0)
+                mdx = self.load_model(fname,comp,args)
                 if not mdx.optimizer:
                     print("====== ", fname, " : starting from fresh optimizer state ======")
                     self.compile_model(mdx, args)
