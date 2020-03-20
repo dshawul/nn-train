@@ -178,7 +178,8 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLIC
     # policy head
     if policy == 0:
         x = Flatten('channels_first')(px)
-        policy = dense(x, NPOLICY, "policy", act='softmax')
+        policy = dense(x, NPOLICY, "policy", act=None)
+        policy = Activation("softmax", name='policya')(x)
     else:
         x = Reshape((NPOLICY,), name='policy')(px)
         policy = Activation("softmax", name='policya')(x)
