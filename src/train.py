@@ -20,7 +20,7 @@ except:
 
 #global params
 AUX_INP = True
-CHANNELS = 24
+CHANNELS = 32
 BOARDX = 8
 BOARDY = 8
 NPOLICY = 73 * BOARDY * BOARDX
@@ -57,6 +57,7 @@ def fill_piece(iplanes, ix, bb, b):
 def fill_planes(iplanes, iparams, b):
     pl = chess.WHITE
     npl = chess.BLACK
+
     #white piece attacks
     bb = b.kings   & b.occupied_co[pl]
     fill_piece(iplanes,0,bb,b)
@@ -70,6 +71,7 @@ def fill_planes(iplanes, iparams, b):
     fill_piece(iplanes,4,bb,b)
     bb = b.pawns   & b.occupied_co[pl]
     fill_piece(iplanes,5,bb,b)
+
     #black piece attacks
     bb = b.kings   & b.occupied_co[npl]
     fill_piece(iplanes,6,bb,b)
@@ -83,6 +85,23 @@ def fill_planes(iplanes, iparams, b):
     fill_piece(iplanes,10,bb,b)
     bb = b.pawns   & b.occupied_co[npl]
     fill_piece(iplanes,11,bb,b)
+
+    #enpassant, casling, fifty and on-board mask
+    if b.ep_square:
+        f = chess.square_file(b.ep_square)
+        r = chess.square_rank(b.ep_square)
+        iplanes[r, f, CHANNELS - 8] = 1.0
+    if b.has_queenside_castling_rights(chess.WHITE):
+        iplanes[:, :, CHANNELS - 7] = 1.0
+    if b.has_kingside_castling_rights(chess.WHITE):
+        iplanes[:, :, CHANNELS - 6] = 1.0
+    if b.has_queenside_castling_rights(chess.BLACK):
+        iplanes[:, :, CHANNELS - 5] = 1.0
+    if b.has_kingside_castling_rights(chess.BLACK):
+        iplanes[:, :, CHANNELS - 4] = 1.0
+    iplanes[:, :, CHANNELS - 3] = b.fullmove_number / 200.0
+    iplanes[:, :, CHANNELS - 2] = b.halfmove_clock / 100.0
+    iplanes[:, :, CHANNELS - 1] = 1.0
 
     #piece counts
     if AUX_INP:

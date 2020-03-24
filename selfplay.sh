@@ -33,7 +33,7 @@ RSAVO=4096         # Save weights with optimization after this many chunks
 #Network parameters
 BOARDX=8
 BOARDY=8
-CHANNELS=24
+CHANNELS=32
 POL_STYLE=1
 NPOLICY=4672
 NOAUXINP=
