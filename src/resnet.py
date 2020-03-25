@@ -10,6 +10,7 @@ from tensorflow.keras.layers import (
     Concatenate,
     Reshape,
     GlobalAveragePooling2D,
+    GlobalMaxPool2D,
     Multiply,
     Permute
 )
@@ -110,6 +111,12 @@ def squeeze_excite_block(inp, filters, ratio, name):
     x = Permute((2,3,1),name=name+"_permute_2")(x)
     return x
 
+def pool_layer(x, name):
+
+    x = Permute((3,1,2),name=name+"_permute")(x)
+    x = GlobalAveragePooling2D('channels_first', name=name+"_avg_pool")(x)
+    return x
+
 def build_post_net(x, blocks,filters, policy):
 
     for i in range(blocks-1):
@@ -155,10 +162,11 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLIC
         x = build_post_net(x, blocks, filters, policy)
 
     # value and policy head convolutions
-    vx = conv_bn_relu(x,2,1,False,"value")
+    vx = conv_bn_relu(x,128,1,False,"value")
+    vx = pool_layer(vx,"value")
     if policy == 1:
         px = conv_bn_relu(x,filters,3,False,"policy_1")
-        px = conv_bn_relu(px,73,1,True,"policy_2")
+        px = conv_bn_relu(px,16,1,True,"policy_2")
     else:
         px = conv_bn_relu(x,4,1,False,"policy_1")
 

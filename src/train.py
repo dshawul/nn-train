@@ -23,7 +23,7 @@ AUX_INP = True
 CHANNELS = 32
 BOARDX = 8
 BOARDY = 8
-NPOLICY = 73 * BOARDY * BOARDX
+NPOLICY = 16 * BOARDY * BOARDX
 NPARMS = 5
 NBATCH = 512
 BATCH_SIZE = 512
@@ -335,15 +335,15 @@ def build_model(cid,policy):
         auxinp = False
 
     if cid == 0:
-        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,),  2,  32, policy, NPOLICY, auxinp)
+        return resnet.build_net((None, None, CHANNELS), (NPARMS,),  2,  32, policy, NPOLICY, auxinp)
     elif cid == 1:
-        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,),  6,  64, policy, NPOLICY, auxinp)
+        return resnet.build_net((None, None, CHANNELS), (NPARMS,),  6,  64, policy, NPOLICY, auxinp)
     elif cid == 2:
-        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 12, 128, policy, NPOLICY, auxinp)
+        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 12, 128, policy, NPOLICY, auxinp)
     elif cid == 3:
-        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 20, 256, policy, NPOLICY, auxinp)
+        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 20, 256, policy, NPOLICY, auxinp)
     elif cid == 4:
-        return resnet.build_net((BOARDY, BOARDX, CHANNELS), (NPARMS,), 40, 256, policy, NPOLICY, auxinp)
+        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 40, 256, policy, NPOLICY, auxinp)
     else:
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
