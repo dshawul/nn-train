@@ -31,8 +31,11 @@ EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
 USE_EPD = False
 VALUE_TARGET = 0
 PIECE_MAP = "KQRBNPkqrbnp"
+RANK_U = BOARDY - 1
+FILE_U = BOARDX - 1
 
-def fill_piece(iplanes, ix, bb, b):
+def fill_piece(iplanes, ix, bb, b, flip_file):
+
     if AUX_INP:
         abb = 0
         squares = chess.SquareSet(bb)
@@ -40,65 +43,78 @@ def fill_piece(iplanes, ix, bb, b):
             abb = abb | b.attacks_mask(sq)
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
+            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix + 12] = 1.0
 
         squares = chess.SquareSet(abb)
         for sq in squares:
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
+            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
     else:
         squares = chess.SquareSet(bb)
         for sq in squares:
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
+            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
 
 def fill_planes(iplanes, iparams, b):
-    pl = chess.WHITE
-    npl = chess.BLACK
+    pl = b.turn
+    npl = not b.turn
+
+    #flip horizontal
+    flip_file = (chess.square_file(b.king(pl)) < 4)
 
     #white piece attacks
     bb = b.kings   & b.occupied_co[pl]
-    fill_piece(iplanes,0,bb,b)
+    fill_piece(iplanes,0,bb,b,flip_file)
     bb = b.queens  & b.occupied_co[pl]
-    fill_piece(iplanes,1,bb,b)
+    fill_piece(iplanes,1,bb,b,flip_file)
     bb = b.rooks   & b.occupied_co[pl]
-    fill_piece(iplanes,2,bb,b)
+    fill_piece(iplanes,2,bb,b,flip_file)
     bb = b.bishops & b.occupied_co[pl]
-    fill_piece(iplanes,3,bb,b)
+    fill_piece(iplanes,3,bb,b,flip_file)
     bb = b.knights & b.occupied_co[pl]
-    fill_piece(iplanes,4,bb,b)
+    fill_piece(iplanes,4,bb,b,flip_file)
     bb = b.pawns   & b.occupied_co[pl]
-    fill_piece(iplanes,5,bb,b)
+    fill_piece(iplanes,5,bb,b,flip_file)
 
     #black piece attacks
     bb = b.kings   & b.occupied_co[npl]
-    fill_piece(iplanes,6,bb,b)
+    fill_piece(iplanes,6,bb,b,flip_file)
     bb = b.queens  & b.occupied_co[npl]
-    fill_piece(iplanes,7,bb,b)
+    fill_piece(iplanes,7,bb,b,flip_file)
     bb = b.rooks   & b.occupied_co[npl]
-    fill_piece(iplanes,8,bb,b)
+    fill_piece(iplanes,8,bb,b,flip_file)
     bb = b.bishops & b.occupied_co[npl]
-    fill_piece(iplanes,9,bb,b)
+    fill_piece(iplanes,9,bb,b,flip_file)
     bb = b.knights & b.occupied_co[npl]
-    fill_piece(iplanes,10,bb,b)
+    fill_piece(iplanes,10,bb,b,flip_file)
     bb = b.pawns   & b.occupied_co[npl]
-    fill_piece(iplanes,11,bb,b)
+    fill_piece(iplanes,11,bb,b,flip_file)
 
     #enpassant, casling, fifty and on-board mask
     if b.ep_square:
         f = chess.square_file(b.ep_square)
         r = chess.square_rank(b.ep_square)
+        if b.turn == chess.BLACK: r = RANK_U -r
+        if flip_file: f = FILE_U - f
         iplanes[r, f, CHANNELS - 8] = 1.0
-    if b.has_queenside_castling_rights(chess.WHITE):
-        iplanes[:, :, CHANNELS - 7] = 1.0
-    if b.has_kingside_castling_rights(chess.WHITE):
-        iplanes[:, :, CHANNELS - 6] = 1.0
-    if b.has_queenside_castling_rights(chess.BLACK):
-        iplanes[:, :, CHANNELS - 5] = 1.0
-    if b.has_kingside_castling_rights(chess.BLACK):
-        iplanes[:, :, CHANNELS - 4] = 1.0
+
+    if b.has_queenside_castling_rights(pl):
+        iplanes[:, :, CHANNELS - (6 if flip_file else 7)] = 1.0
+    if b.has_kingside_castling_rights(pl):
+        iplanes[:, :, CHANNELS - (7 if flip_file else 6)] = 1.0
+    if b.has_queenside_castling_rights(npl):
+        iplanes[:, :, CHANNELS - (4 if flip_file else 5)] = 1.0
+    if b.has_kingside_castling_rights(npl):
+        iplanes[:, :, CHANNELS - (5 if flip_file else 4)] = 1.0
+
     iplanes[:, :, CHANNELS - 3] = b.fullmove_number / 200.0
     iplanes[:, :, CHANNELS - 2] = b.halfmove_clock / 100.0
     iplanes[:, :, CHANNELS - 1] = 1.0
@@ -117,9 +133,6 @@ def fill_planes(iplanes, iparams, b):
         iparams[4] = v
 
 def fill_planes_fen(iplanes, fen, player):
-
-    RANK_U = BOARDY - 1
-    FILE_U = BOARDX - 1
 
     #board
     cnt = 0
@@ -207,13 +220,6 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
             #set board
             if USE_EPD and AUX_INP:
                 bb.set_epd(epd)
-            
-            #flip board
-            if player == 1:
-                if USE_EPD and AUX_INP:
-                    bb = bb.mirror()
-                result = 2 - result
-                value = 1 - value
 
             offset = 9
         else:
@@ -229,12 +235,12 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
             # nmoves
             nmoves = int(words[3])
 
-            #flip board
-            if player == 1:
-                result = 2 - result
-                value = 1 - value
-
             offset = 4
+
+        #flip board
+        if player == 1:
+            result = 2 - result
+            value = 1 - value
 
         #result
         oresult[id] = result
@@ -515,17 +521,8 @@ def train_epd(myNet,args,myEpd,start=1):
                 break
 
 def main(argv):
-    global USE_EPD
-    global AUX_INP
-    global EPD_CHUNK_SIZE
-    global CHANNELS
-    global BOARDX
-    global BOARDY
-    global NPOLICY
-    global VALUE_TARGET
-    global NBATCH
-    global BATCH_SIZE
-    global PIECE_MAP
+    global USE_EPD, AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY
+    global NPOLICY, VALUE_TARGET, NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -578,6 +575,8 @@ def main(argv):
     CHANNELS = args.channels
     BOARDX = args.boardx
     BOARDY = args.boardy
+    RANK_U = BOARDY - 1
+    FILE_U = BOARDX - 1
     NPOLICY = args.npolicy
     AUX_INP = args.noauxinp
     VALUE_TARGET = args.value_target
