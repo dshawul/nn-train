@@ -392,7 +392,7 @@ get_src_epd() {
 replay_buffer() {
     ND=$((NREPLAY/G))
 
-    if [ $ND -le $V ]; then
+    if [ "$ND" -le "$V" ]; then
         A=`seq 0 $((V-ND))`
         for i in $A; do
             rm -rf ${NETS_DIR}/data$i.epd
