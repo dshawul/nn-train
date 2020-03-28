@@ -135,6 +135,7 @@ def fill_planes(iplanes, iparams, b):
 def fill_planes_fen(iplanes, fen, player):
 
     #board
+    kf = 4
     cnt = 0
     for r in range(RANK_U, -1, -1):
         for f in range(0, FILE_U + 1, 1):
@@ -145,6 +146,8 @@ def fill_planes_fen(iplanes, fen, player):
                     iplanes[r,  f,  idx] = 1.0
                 else:
                     iplanes[RANK_U - r,  f,  (idx^1)] = 1.0
+                if c == 'K':
+                    kf = f
                 cnt = cnt + 1
             elif c.isdigit():
                 b = int(c)
@@ -157,10 +160,19 @@ def fill_planes_fen(iplanes, fen, player):
                 break
         cnt = cnt + 1
 
+    #flip file
+    flip_file = (kf < 4)
+
+    if flip_file:
+        for f in range(0, FILE_U + 1, 1):
+            temp = iplanes[:, FILE_U - f, :]
+            iplanes[:, FILE_U - f, :] = iplanes[:, f, :]
+            iplanes[:, f, :] = temp
+
     #holdings
     if fen[cnt - 1] == '[':
 
-        N_PIECES = CHANNELS // 2
+        N_PIECES = len(PIECE_MAP)
 
         if fen[cnt] == '-':
             cnt = cnt + 1
@@ -181,6 +193,30 @@ def fill_planes_fen(iplanes, fen, player):
                     else:
                         iplanes[:,  :,  (idx^1) + N_PIECES] = holdings[idx] / 50.0
         cnt = cnt + 2
+
+    #enpassant, castling, fifty and on-board mask
+    epstr = words[2]
+    if epstr[0] != '-':
+        f = epstr[0] - 'a'
+        r = epstr[1] - '1'
+        if player == 1: r = RANK_U -r
+        if flip_file: f = FILE_U - f
+        iplanes[r, f, CHANNELS - 8] = 1.0
+
+    castr = words[1]
+    if castr.find('Q' if player == 0 else 'q') != -1:
+        iplanes[:, :, CHANNELS - (6 if flip_file else 7)] = 1.0
+    if castr.find('K' if player == 0 else 'k') != -1:
+        iplanes[:, :, CHANNELS - (7 if flip_file else 6)] = 1.0
+    if castr.find('q' if player == 0 else 'Q') != -1:
+        iplanes[:, :, CHANNELS - (4 if flip_file else 5)] = 1.0
+    if castr.find('k' if player == 0 else 'K') != -1:
+        iplanes[:, :, CHANNELS - (5 if flip_file else 4)] = 1.0
+
+    iplanes[:, :, CHANNELS - 3] = float(words[4]) / 200.0
+    iplanes[:, :, CHANNELS - 2] = float(words[3]) / 100.0
+    iplanes[:, :, CHANNELS - 1] = 1.0
+
 
 def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
     if USE_EPD and AUX_INP:
@@ -266,7 +302,7 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
             if AUX_INP:
                 fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
             else:
-                fill_planes_fen(iplane[id,:,:,:],epd,player)
+                fill_planes_fen(iplane[id,:,:,:],epd,words,player)
         else:
             st=offset+nmoves*2
 
