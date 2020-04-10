@@ -24,7 +24,6 @@ CHANNELS = 32
 BOARDX = 8
 BOARDY = 8
 NPOLICY = 16 * BOARDY * BOARDX
-NPARMS = 5
 NBATCH = 512
 BATCH_SIZE = 512
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
@@ -63,7 +62,7 @@ def fill_piece(iplanes, ix, bb, b, flip_file):
             if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
 
-def fill_planes(iplanes, iparams, b):
+def fill_planes(iplanes, b):
     pl = b.turn
     npl = not b.turn
 
@@ -118,19 +117,6 @@ def fill_planes(iplanes, iparams, b):
     iplanes[:, :, CHANNELS - 3] = b.fullmove_number / 200.0
     iplanes[:, :, CHANNELS - 2] = b.halfmove_clock / 100.0
     iplanes[:, :, CHANNELS - 1] = 1.0
-
-    #piece counts
-    if AUX_INP:
-        v = chess.popcount(b.queens  & b.occupied_co[pl]) - chess.popcount(b.queens  & b.occupied_co[npl])
-        iparams[0] = v
-        v = chess.popcount(b.rooks   & b.occupied_co[pl]) - chess.popcount(b.rooks   & b.occupied_co[npl])
-        iparams[1] = v
-        v = chess.popcount(b.bishops & b.occupied_co[pl]) - chess.popcount(b.bishops & b.occupied_co[npl])
-        iparams[2] = v
-        v = chess.popcount(b.knights & b.occupied_co[pl]) - chess.popcount(b.knights & b.occupied_co[npl])
-        iparams[3] = v
-        v = chess.popcount(b.pawns   & b.occupied_co[pl]) - chess.popcount(b.pawns   & b.occupied_co[npl])
-        iparams[4] = v
 
 def fill_planes_fen(iplanes, fen, player):
 
@@ -218,7 +204,7 @@ def fill_planes_fen(iplanes, fen, player):
     iplanes[:, :, CHANNELS - 1] = 1.0
 
 
-def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
+def fill_examples(examples,iplane,opolicy,oresult,ovalue):
     if USE_EPD and AUX_INP:
         bb = chess.Board()
 
@@ -300,16 +286,11 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
         #input planes
         if USE_EPD:
             if AUX_INP:
-                fill_planes(iplane[id,:,:,:],iparam[id,:],bb)
+                fill_planes(iplane[id,:,:,:],bb)
             else:
                 fill_planes_fen(iplane[id,:,:,:],epd,words,player)
         else:
             st=offset+nmoves*2
-
-            if AUX_INP:
-                for i in range(0, NPARMS):
-                    iparam[id,i] = float(words[st+i])
-                st = st + 5
 
             v1 = int(words[st])
             st = st + 1
@@ -329,21 +310,17 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
                 v1 = 1 - v1
 
 def build_model(cid,policy):
-    if AUX_INP:
-        auxinp = True
-    else:
-        auxinp = False
-
+    INPUT_SHAPE=(None, None, CHANNELS)
     if cid == 0:
-        return resnet.build_net((None, None, CHANNELS), (NPARMS,),  2,  32, policy, NPOLICY, auxinp)
+        return resnet.build_net(INPUT_SHAPE,  2,  32, policy, NPOLICY)
     elif cid == 1:
-        return resnet.build_net((None, None, CHANNELS), (NPARMS,),  6,  64, policy, NPOLICY, auxinp)
+        return resnet.build_net(INPUT_SHAPE,  6,  64, policy, NPOLICY)
     elif cid == 2:
-        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 12, 128, policy, NPOLICY, auxinp)
+        return resnet.build_net(INPUT_SHAPE, 12, 128, policy, NPOLICY)
     elif cid == 3:
-        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 20, 256, policy, NPOLICY, auxinp)
+        return resnet.build_net(INPUT_SHAPE, 20, 256, policy, NPOLICY)
     elif cid == 4:
-        return resnet.build_net((None, None, CHANNELS), (NPARMS,), 40, 256, policy, NPOLICY, auxinp)
+        return resnet.build_net(INPUT_SHAPE, 40, 256, policy, NPOLICY)
     else:
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
@@ -412,9 +389,6 @@ class NNet():
         ipln_memmap = os.path.join(folder, 'ipln_memmap')
         ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
 
-        ipar_memmap = os.path.join(folder, 'ipar_memmap')
-        ipar = np.memmap(ipar_memmap,dtype=np.float32,shape=(N,NPARMS),mode='w+')
-
         opol_memmap = os.path.join(folder, 'opol_memmap')
         opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,NPOLICY),mode='w+')
 
@@ -428,7 +402,7 @@ class NNet():
         nlen = N / args.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
         Parallel(n_jobs=args.cores)( delayed(fill_examples) (                      \
-            examples[sl],ipln[sl,:,:,:],ipar[sl,:],opol[sl,:],ores[sl],oval[sl,:]  \
+            examples[sl],ipln[sl,:,:,:],opol[sl,:],ores[sl],oval[sl,:]  \
             ) for sl in slices )
 
         end_t = time.time()
@@ -442,19 +416,14 @@ class NNet():
 
         for i in range(len(self.model)):
             print("Fitting model",i)
-            if AUX_INP:
-                xi = [ipln,ipar]
-            else:
-                xi = [ipln]
-
             if args.pol_grad > 0:
-                self.model[i].fit(x = xi, y = [oval, opol],
+                self.model[i].fit(x = [ipln], y = [oval, opol],
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
                       validation_split=args.vald_split,
                       epochs=args.epochs)
             else:
-                self.model[i].fit(x = xi, y = [oval, opol],
+                self.model[i].fit(x = [ipln], y = [oval, opol],
                       batch_size=BATCH_SIZE,
                       validation_split=args.vald_split,
                       epochs=args.epochs)

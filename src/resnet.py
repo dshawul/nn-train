@@ -147,7 +147,7 @@ def build_pre_net(x, blocks,filters, policy):
 
     return x
 
-def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLICY, auxinp):
+def build_net(main_input_shape,  blocks, filters, policy, NPOLICY):
 
     main_input = Input(shape=main_input_shape, name='main_input')
     x = main_input
@@ -173,13 +173,6 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLIC
     # value head
     x = Flatten(name='value_flatten')(vx)
     x = dense(x, 128, "value_dense_1")
-
-    if auxinp:
-        aux_input = Input(shape=aux_input_shape, name = 'aux_input')
-        y = aux_input
-        y = dense(y, 32, "value_dense_2")
-        x = Concatenate(name='value_concat')([x, y])
-
     x = dense(x, 32, "value_dense_3")
     value = dense(x, 3, "value", act='softmax')
 
@@ -193,9 +186,5 @@ def build_net(main_input_shape, aux_input_shape, blocks, filters, policy, NPOLIC
         policy = Activation("softmax", name='policya')(x)
 
     # model
-    if auxinp:
-        xi = [main_input, aux_input]
-    else:
-        xi = [main_input]
-    model = Model(inputs=xi, outputs=[value, policy])
+    model = Model(inputs=[main_input], outputs=[value, policy])
     return model
