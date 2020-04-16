@@ -182,7 +182,7 @@ def build_net(main_input_shape,  blocks, filters, policy, NPOLICY):
         policy = dense(x, NPOLICY, "policy", act=None)
         policy = Activation("softmax", name='policya')(x)
     else:
-        x = Reshape((NPOLICY,), name='policy')(px)
+        x = Reshape((-1,), name='policy')(px)
         policy = Activation("softmax", name='policya')(x)
 
     # model
