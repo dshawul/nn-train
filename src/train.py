@@ -255,7 +255,7 @@ def fill_examples(examples,iplane,iparam,opolicy,oresult,ovalue):
 
             #set board
             if USE_EPD and AUX_INP:
-                bb.set_epd(epd)
+                bb.set_fen(epd)
 
             offset = 9
         else:
