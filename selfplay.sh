@@ -34,8 +34,7 @@ RSAVO=4096         # Save weights with optimization after this many chunks
 BOARDX=8
 BOARDY=8
 CHANNELS=32
-POL_STYLE=1
-NPOLICY=4672
+POL_CHANNELS=16
 NOAUXINP=
 TRNFLGS="--mixed"
 NBATCH=512
@@ -175,8 +174,8 @@ init0() {
 #initialize random network
 init() {
     python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
-            ${NOAUXINP} --channels ${CHANNELS} --pol ${POL_STYLE} \
-            --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY}
+            ${NOAUXINP} --channels ${CHANNELS} --pol-channels ${POL_CHANNELS} \
+            --boardx ${BOARDX} --boardy ${BOARDY}
     ./scripts/prepare.sh ${NETS_DIR} 0 $1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
 }
@@ -264,8 +263,8 @@ train() {
     python src/train.py ${TRNFLGS} \
        --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
-       --pol ${POL_STYLE} --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
-       --boardx ${BOARDX} --boardy ${BOARDY} --npolicy ${NPOLICY} --value-target ${DISTILL} ${NOAUXINP}
+       --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
+       --boardx ${BOARDX} --boardy ${BOARDY} --pol-channels ${POL_CHANNELS} --value-target ${DISTILL} ${NOAUXINP}
 }
 
 #move

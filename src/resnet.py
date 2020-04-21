@@ -117,7 +117,7 @@ def pool_layer(x, name):
     x = GlobalAveragePooling2D('channels_first', name=name+"_avg_pool")(x)
     return x
 
-def build_post_net(x, blocks,filters, policy):
+def build_post_net(x, blocks,filters):
 
     for i in range(blocks-1):
         inp = x
@@ -130,7 +130,7 @@ def build_post_net(x, blocks,filters, policy):
 
     return x
 
-def build_pre_net(x, blocks,filters, policy):
+def build_pre_net(x, blocks,filters):
 
     for i in range(blocks-1):
         inp = x
@@ -147,7 +147,7 @@ def build_pre_net(x, blocks,filters, policy):
 
     return x
 
-def build_net(main_input_shape,  blocks, filters, policy, NPOLICY):
+def build_net(main_input_shape,  blocks, filters, pol_channels):
 
     main_input = Input(shape=main_input_shape, name='main_input')
     x = main_input
@@ -157,18 +157,16 @@ def build_net(main_input_shape,  blocks, filters, policy, NPOLICY):
 
     # residual tower
     if USE_PRE_ACTIVATION:
-        x = build_pre_net(x, blocks, filters, policy)
+        x = build_pre_net(x, blocks, filters)
     else:
-        x = build_post_net(x, blocks, filters, policy)
+        x = build_post_net(x, blocks, filters)
 
     # value and policy head convolutions
     vx = conv_bn_relu(x,128,1,False,"value")
     vx = pool_layer(vx,"value")
-    if policy == 1:
-        px = conv_bn_relu(x,filters,3,False,"policy_1")
-        px = conv_bn_relu(px,16,1,True,"policy_2")
-    else:
-        px = conv_bn_relu(x,4,1,False,"policy_1")
+
+    px = conv_bn_relu(x,filters,3,False,"policy_1")
+    px = conv_bn_relu(px,pol_channels,1,True,"policy_2")
 
     # value head
     x = Flatten(name='value_flatten')(vx)
@@ -177,13 +175,8 @@ def build_net(main_input_shape,  blocks, filters, policy, NPOLICY):
     value = dense(x, 3, "value", act='softmax')
 
     # policy head
-    if policy == 0:
-        x = Flatten('channels_first')(px)
-        policy = dense(x, NPOLICY, "policy", act=None)
-        policy = Activation("softmax", name='policya')(x)
-    else:
-        x = Reshape((-1,), name='policy')(px)
-        policy = Activation("softmax", name='policya')(x)
+    x = Reshape((-1,), name='policy')(px)
+    policy = Activation("softmax", name='policya')(x)
 
     # model
     model = Model(inputs=[main_input], outputs=[value, policy])

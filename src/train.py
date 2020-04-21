@@ -23,7 +23,7 @@ AUX_INP = True
 CHANNELS = 32
 BOARDX = 8
 BOARDY = 8
-NPOLICY = 16 * BOARDY * BOARDX
+POLICY_CHANNELS = 16
 NBATCH = 512
 BATCH_SIZE = 512
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
@@ -309,18 +309,18 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
                     idx = idx + l
                 v1 = 1 - v1
 
-def build_model(cid,policy):
+def build_model(cid):
     INPUT_SHAPE=(None, None, CHANNELS)
     if cid == 0:
-        return resnet.build_net(INPUT_SHAPE,  2,  32, policy, NPOLICY)
+        return resnet.build_net(INPUT_SHAPE,  2,  32, POLICY_CHANNELS)
     elif cid == 1:
-        return resnet.build_net(INPUT_SHAPE,  6,  64, policy, NPOLICY)
+        return resnet.build_net(INPUT_SHAPE,  6,  64, POLICY_CHANNELS)
     elif cid == 2:
-        return resnet.build_net(INPUT_SHAPE, 12, 128, policy, NPOLICY)
+        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS)
     elif cid == 3:
-        return resnet.build_net(INPUT_SHAPE, 20, 256, policy, NPOLICY)
+        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS)
     elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 40, 256, policy, NPOLICY)
+        return resnet.build_net(INPUT_SHAPE, 40, 256, POLICY_CHANNELS)
     else:
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
@@ -332,9 +332,9 @@ class NNet():
     def new_model(self,idx,args):
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                return build_model(idx, args.policy)
+                return build_model(idx)
         else:
-            return build_model(idx, args.policy)
+            return build_model(idx)
 
     def load_model(self,fname,compile,args):
         if args.gpus > 1:
@@ -390,7 +390,7 @@ class NNet():
         ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
 
         opol_memmap = os.path.join(folder, 'opol_memmap')
-        opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,NPOLICY),mode='w+')
+        opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),mode='w+')
 
         ores_memmap = os.path.join(folder, 'ores_memmap')
         ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
@@ -527,7 +527,7 @@ def train_epd(myNet,args,myEpd,start=1):
 
 def main(argv):
     global USE_EPD, AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY
-    global NPOLICY, VALUE_TARGET, NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
+    global POLICY_CHANNELS, VALUE_TARGET, NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -548,7 +548,7 @@ def main(argv):
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam.')
-    parser.add_argument('--pol',dest='policy', required=False, type=int,default=1, help='Policy head style 0=simple, 1=A0 style')
+    parser.add_argument('--pol-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
     parser.add_argument('--pol_w',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
     parser.add_argument('--val_w',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
     parser.add_argument('--pol_grad',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
@@ -556,7 +556,6 @@ def main(argv):
     parser.add_argument('--channels','-c', dest='channels', required=False, type=int, default=CHANNELS, help='number of input channels of network.')
     parser.add_argument('--boardx','-x', dest='boardx', required=False, type=int, default=BOARDX, help='board x-dimension.')
     parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
-    parser.add_argument('--npolicy', dest='npolicy', required=False, type=int, default=NPOLICY, help='The number of maximum possible moves.')
     parser.add_argument('--value-target',dest='value_target', required=False, type=int, default=VALUE_TARGET, help='Value target 0=z, 1=q and 2=(q+z)/2.')
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
@@ -582,7 +581,7 @@ def main(argv):
     BOARDY = args.boardy
     RANK_U = BOARDY - 1
     FILE_U = BOARDX - 1
-    NPOLICY = args.npolicy
+    POLICY_CHANNELS = args.pol_channels
     AUX_INP = args.noauxinp
     VALUE_TARGET = args.value_target
     PIECE_MAP = args.pcmap
