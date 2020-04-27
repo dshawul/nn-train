@@ -27,7 +27,6 @@ POLICY_CHANNELS = 16
 NBATCH = 512
 BATCH_SIZE = 512
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
-USE_EPD = False
 VALUE_TARGET = 0
 PIECE_MAP = "KQRBNPkqrbnp"
 RANK_U = BOARDY - 1
@@ -205,7 +204,7 @@ def fill_planes_fen(iplanes, fen, player):
 
 
 def fill_examples(examples,iplane,opolicy,oresult,ovalue):
-    if USE_EPD and AUX_INP:
+    if AUX_INP:
         bb = chess.Board()
 
     for id,line in enumerate(examples):
@@ -214,50 +213,35 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
 
         epd = ''
 
-        if USE_EPD:
-            for i in range(0, 6):
-                epd = epd + words[i] + ' '
+        for i in range(0, 6):
+            epd = epd + words[i] + ' '
 
-            #player
-            if words[1] == 'b':
-                player = 1
-            else:
-                player = 0
-
-            # parse result
-            svalue = words[6]
-            if svalue == '1-0':
-                result = 0
-            elif svalue == '0-1':
-                result = 2
-            else:
-                result = 1
-
-            # value
-            value = float(words[7])
-
-            # nmoves
-            nmoves = int(words[8])
-
-            #set board
-            if USE_EPD and AUX_INP:
-                bb.set_fen(epd)
-
-            offset = 9
+        #player
+        if words[1] == 'b':
+            player = 1
         else:
-            # player
-            player = int(words[0])
+            player = 0
 
-            # result
-            result = int(words[1])
+        # parse result
+        svalue = words[6]
+        if svalue == '1-0':
+            result = 0
+        elif svalue == '0-1':
+            result = 2
+        else:
+            result = 1
 
-            # value
-            value = float(words[2])
+        # value
+        value = float(words[7])
 
-            # nmoves
-            nmoves = int(words[3])
+        # nmoves
+        nmoves = int(words[8])
 
-            offset = 4
+        #set board
+        if AUX_INP:
+            bb.set_fen(epd)
+
+        offset = 9
 
         #flip board
         if player == 1:
@@ -284,30 +268,10 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
             opolicy[id, int(words[i])] = float(words[i+1])
 
         #input planes
-        if USE_EPD:
-            if AUX_INP:
-                fill_planes(iplane[id,:,:,:],bb)
-            else:
-                fill_planes_fen(iplane[id,:,:,:],epd,words,player)
+        if AUX_INP:
+            fill_planes(iplane[id,:,:,:],bb)
         else:
-            st=offset+nmoves*2
-
-            v1 = int(words[st])
-            st = st + 1
-            idx = 0
-            for i in range(st, len(words)):
-                l = int(words[i])
-                if v1 > 0:
-                    for k in range(0,l):
-                        rm = idx % (8 * CHANNELS)
-                        r = int(idx // (8 * CHANNELS))
-                        s = int(rm // CHANNELS)
-                        t = rm % CHANNELS
-                        iplane[id,r,s,t] = v1
-                        idx = idx + 1
-                else:
-                    idx = idx + l
-                v1 = 1 - v1
+            fill_planes_fen(iplane[id,:,:,:],epd,words,player)
 
 def build_model(cid):
     INPUT_SHAPE=(None, None, CHANNELS)
@@ -371,7 +335,7 @@ class NNet():
 
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                mdx.compile(loss=loss_weights,loss_weights=loss_weights,
+                mdx.compile(loss=losses,loss_weights=loss_weights,
                       optimizer=opt,metrics=metrics)
         else:
             mdx.compile(loss=losses,loss_weights=loss_weights,
@@ -408,6 +372,7 @@ class NNet():
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
         
+        start_t = end_t
         vweights = None
         pweights = None
         if args.pol_grad > 0:
@@ -427,6 +392,8 @@ class NNet():
                       batch_size=BATCH_SIZE,
                       validation_split=args.vald_split,
                       epochs=args.epochs)
+        end_t = time.time()
+        print("Training time", int(end_t - start_t), "sec")
 
     def save_checkpoint(self, chunk, args, iopt=False):
         filepath = os.path.join(args.dir, "ID-" + str(chunk))
@@ -512,13 +479,17 @@ def train_epd(myNet,args,myEpd,start=1):
                     print("Time", int(end_t - start_t), "sec")
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
                     myNet.train(examples,args)
+
+                    start_t = time.time()
                     if chunk % args.rsavo == 0:
                         myNet.save_checkpoint(chunk, args, True)
                     elif chunk % args.rsav == 0:
                         myNet.save_checkpoint(chunk, args, False)
+                    end_t = time.time()
+                    print("Saving time", int(end_t - start_t), "sec")
 
-                    examples = []
                     start_t = time.time()
+                    examples = []
                     print("Collecting data")
 
             #break out
@@ -526,12 +497,11 @@ def train_epd(myNet,args,myEpd,start=1):
                 break
 
 def main(argv):
-    global USE_EPD, AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY
+    global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY
     global POLICY_CHANNELS, VALUE_TARGET, NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
-    parser.add_argument('--trn','-t', dest='trn', required=False, help='Path to labeled training file')
     parser.add_argument('--dir', dest='dir', required=False, default="nets", help='Path to network files')
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=BATCH_SIZE, help='Training batch size.')
@@ -607,18 +577,13 @@ def main(argv):
 
     if args.rand:
         myNet.save_checkpoint(chunk, args)
-    elif (args.epd != None) or (args.trn != None):
+    else:
         folder = './joblib_memmap'
         if not os.path.isdir(folder):
             os.mkdir(folder)
 
         start = chunk * EPD_CHUNK_SIZE + 1
-        if args.epd != None:
-            USE_EPD = True
-            train_epd(myNet, args, args.epd, start)
-        else:
-            USE_EPD = False
-            train_epd(myNet, args, args.trn, start)
+        train_epd(myNet, args, args.epd, start)
 
 
 if __name__ == "__main__":
