@@ -247,9 +247,9 @@ rungames() {
         GW=$(($1/(RANKS*GPUS)))
     fi
     if [ $DISTILL = 0 ]; then
-    	NETW="nn_type 0 nn_path ${NDIR}"
+        NETW="nn_type 0 nn_path ${NDIR}"
     else
-	NETW=""
+        NETW=""
     fi
     SCOPT="alphabeta_man_c 0 min_policy_value 0 reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
            backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"

@@ -316,21 +316,19 @@ class NNet():
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
-        def loss(y_true,y_pred):
+        def loss(y_true, y_pred):
             is_legal = tf.greater(y_true, 0)
             y_pred = tf.where(is_legal, y_pred, y_true)
-            cce = tf.keras.losses.CategoricalCrossentropy()
-            return cce(y_true, y_pred)
+            return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
 
         def accuracy(y_true,y_pred):
             is_legal = tf.greater(y_true, 0)
             y_pred = tf.where(is_legal, y_pred, y_true)
-            return tf.reduce_mean(tf.cast(
-                tf.equal(tf.argmax(input=y_true, axis=1), tf.argmax(input=y_pred, axis=1)),
-                tf.float32))
+            return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
 
         losses = {"value":'categorical_crossentropy', "policya":loss}
         metrics = {"value":'accuracy', "policya":accuracy}
+
         loss_weights = [args.val_w, args.pol_w]
 
         if args.gpus > 1:
@@ -377,7 +375,7 @@ class NNet():
         pweights = None
         if args.pol_grad > 0:
             vweights = np.ones(ores.size)
-            pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0)
+            pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0) #  Z-Q
 
         for i in range(len(self.model)):
             print("Fitting model",i)
