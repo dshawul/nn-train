@@ -29,6 +29,8 @@ POL_GRAD=0         # Use policy gradient algo.
 POL_WEIGHT=2       # Policy weight
 VAL_WEIGHT=1       # Value weight
 RSAVO=4096         # Save weights with optimization after this many chunks
+FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
+FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
 
 #Network parameters
 BOARDX=8
@@ -41,6 +43,11 @@ NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
 PIECE_MAP="KQRBNPkqrbnp"
+
+if [ $DISTILL != 0 ]; then
+  FRAC_Z=0
+  FRAC_PI=1
+fi
 
 #nets directory
 WORK_ID=6
@@ -174,7 +181,7 @@ init0() {
 #initialize random network
 init() {
     python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
-            ${NOAUXINP} --channels ${CHANNELS} --pol-channels ${POL_CHANNELS} \
+            ${NOAUXINP} --channels ${CHANNELS} --policy-channels ${POL_CHANNELS} \
             --boardx ${BOARDX} --boardy ${BOARDY}
     ./scripts/prepare.sh ${NETS_DIR} 0 $1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
@@ -262,9 +269,9 @@ rungames() {
 train() {
     python src/train.py ${TRNFLGS} \
        --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
-       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --pol_w ${POL_WEIGHT} --val_w ${VAL_WEIGHT} \
-       --pol_grad ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
-       --boardx ${BOARDX} --boardy ${BOARDY} --pol-channels ${POL_CHANNELS} --value-target ${DISTILL} ${NOAUXINP}
+       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} \
+       --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
+       --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} ${NOAUXINP}
 }
 
 #move

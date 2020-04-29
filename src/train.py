@@ -27,10 +27,11 @@ POLICY_CHANNELS = 16
 NBATCH = 512
 BATCH_SIZE = 512
 EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
-VALUE_TARGET = 0
 PIECE_MAP = "KQRBNPkqrbnp"
 RANK_U = BOARDY - 1
 FILE_U = BOARDX - 1
+FRAC_PI = 1
+FRAC_Z  = 1
 
 def fill_piece(iplanes, ix, bb, b, flip_file):
 
@@ -252,20 +253,27 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
         oresult[id] = result
 
         #value
-        if VALUE_TARGET == 0:
+        if FRAC_Z == 1:
             ovalue[id,:] = 0.0
             ovalue[id,result] = 1.0
         else:
             ovalue[id,1] = 0.7 * min(value, 1 - value)
             ovalue[id,0] = value - ovalue[id,1] / 2.0
             ovalue[id,2] = 1 - ovalue[id,0] - ovalue[id,1]
-            if VALUE_TARGET == 2:
-                ovalue[id,:] /= 2.0
-                ovalue[id,result] += 0.5
+
+            if FRAC_Z > 0:
+                ovalue[id,:] *= (1 - FRAC_Z)
+                ovalue[id,result] += FRAC_Z
 
         #policy
         for i in range(offset, offset+nmoves*2, 2):
             opolicy[id, int(words[i])] = float(words[i+1])
+        offset += nmoves*2
+
+        if (FRAC_PI < 1) and (offset < len(words)):
+            bestm = int(words[offset])
+            opolicy[id, :] *= FRAC_PI
+            opolicy[id, bestm] += (1 - FRAC_PI)
 
         #input planes
         if AUX_INP:
@@ -495,8 +503,8 @@ def train_epd(myNet,args,myEpd,start=1):
                 break
 
 def main(argv):
-    global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY
-    global POLICY_CHANNELS, VALUE_TARGET, NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
+    global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
+    global POLICY_CHANNELS,  NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -506,7 +514,7 @@ def main(argv):
     parser.add_argument('--nbatch',dest='nbatch', required=False, type=int, default=NBATCH, help='Number of batches to process at one time.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
-    parser.add_argument('--vald-split',dest='vald_split', required=False, type=float, default=0.125, help='Fraction of sample to use for validation.')
+    parser.add_argument('--validation-split',dest='vald_split', required=False, type=float, default=0.125, help='Fraction of sample to use for validation.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
@@ -516,15 +524,16 @@ def main(argv):
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam.')
-    parser.add_argument('--pol-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
-    parser.add_argument('--pol_w',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
-    parser.add_argument('--val_w',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
-    parser.add_argument('--pol_grad',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
-    parser.add_argument('--noauxinp','-u',dest='noauxinp', required=False, action='store_false', help='Don\'t use auxillary input')
+    parser.add_argument('--policy-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
+    parser.add_argument('--policy-weight',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
+    parser.add_argument('--value-weight',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
+    parser.add_argument('--policy-gradient',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
+    parser.add_argument('--no-auxinp','-u',dest='noauxinp', required=False, action='store_false', help='Don\'t use auxillary input')
     parser.add_argument('--channels','-c', dest='channels', required=False, type=int, default=CHANNELS, help='number of input channels of network.')
     parser.add_argument('--boardx','-x', dest='boardx', required=False, type=int, default=BOARDX, help='board x-dimension.')
     parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
-    parser.add_argument('--value-target',dest='value_target', required=False, type=int, default=VALUE_TARGET, help='Value target 0=z, 1=q and 2=(q+z)/2.')
+    parser.add_argument('--frac-z',dest='frac_z', required=False, type=float, default=FRAC_Z, help='Fraction of ouctome(Z) relative to MCTS value(Q).')
+    parser.add_argument('--frac-pi',dest='frac_pi', required=False, type=float, default=FRAC_PI, help='Fraction of MCTS policy (PI) relative to one-hot policy(P).')
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
 
@@ -551,7 +560,8 @@ def main(argv):
     FILE_U = BOARDX - 1
     POLICY_CHANNELS = args.pol_channels
     AUX_INP = args.noauxinp
-    VALUE_TARGET = args.value_target
+    FRAC_Z = args.frac_z
+    FRAC_PI = args.frac_pi
     PIECE_MAP = args.pcmap
 
     chunk = args.id
