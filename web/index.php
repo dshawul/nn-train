@@ -69,10 +69,10 @@ foreach( $files as $i=>$f ) {
 
 <nav>
 <p>
-I have started a new big run on April 1, 2020 (no joke) of my existing supervized trained networks.
+I have started a new big run on May 4, 2020 of my existing supervized trained networks.
 I am training all 4 networks, 2x32,6x64,12x128 and 20x256, at the same time with the 20b used for 
 selfplay game generation. The supervized net is already strong so selfplay training is started with an 
-LR = 0.005.
+LR = 0.006.
 </p>
 </nav>
 
