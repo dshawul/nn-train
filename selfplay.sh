@@ -67,6 +67,9 @@ else
    MPICMD=
 fi
 
+#total steps
+GLOBAL_STEPS=0
+
 #kill background processes on exit
 trap 'kill $(jobs -p)' EXIT INT
 
@@ -270,7 +273,7 @@ train() {
     python src/train.py ${TRNFLGS} \
        --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} \
-       --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} \
+       --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
        --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} ${NOAUXINP}
 }
 
@@ -394,6 +397,19 @@ get_src_epd() {
     CI=$((CI+1))
 }
 
+#calcuate global steps
+calc_global_steps() {
+    ND=$((NREPLAY/G))
+
+    if [ "$ND" -le "$V" ]; then
+        GLOBAL_STEPS=$(( ((NSTEPS*(ND+1)) / 2) + (V-ND)*NSTEPS ))
+    else
+        GLOBAL_STEPS=$(( (NSTEPS*(V+1)*(V+2)) / (2*ND) ))
+    fi
+
+    echo "Global number of steps trained so far: " $GLOBAL_STEPS
+}
+
 #prepare shuffled replay buffer
 replay_buffer() {
     ND=$((NREPLAY/G))
@@ -448,6 +464,7 @@ selfplay_loop() {
 
         echo 'Training new net from net ID = ' $V
         time train
+        calc_global_steps
 
         fornets conv
 

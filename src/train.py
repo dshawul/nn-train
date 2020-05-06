@@ -347,7 +347,7 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,examples,args):
+    def train(self,examples,local_steps,args):
         print("Generating input planes using", args.cores, "cores")
         start_t = time.time()
 
@@ -387,17 +387,27 @@ class NNet():
 
         for i in range(len(self.model)):
             print("Fitting model",i)
+
+            tensorboard_callback = self.cbacks[i]
+            initial_epoch = args.global_steps + local_steps
+            epochs = initial_epoch + args.epochs
+
             if args.pol_grad > 0:
                 self.model[i].fit(x = [ipln], y = [oval, opol],
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
                       validation_split=args.vald_split,
-                      epochs=args.epochs)
+                      initial_epoch=initial_epoch,
+                      epochs=epochs,
+                      callbacks=[tensorboard_callback])
             else:
                 self.model[i].fit(x = [ipln], y = [oval, opol],
                       batch_size=BATCH_SIZE,
                       validation_split=args.vald_split,
-                      epochs=args.epochs)
+                      initial_epoch=initial_epoch,
+                      epochs=epochs,
+                      callbacks=[tensorboard_callback])
+
         end_t = time.time()
         print("Training time", int(end_t - start_t), "sec")
 
@@ -416,6 +426,7 @@ class NNet():
 
         #create training model
         self.model = []
+        self.cbacks = []
         for n in args.nets:
             fname = filepath  + "-model-" + str(n)
             if not os.path.exists(fname):
@@ -428,6 +439,11 @@ class NNet():
                     print("====== ", fname, " : starting from fresh optimizer state ======")
                     self.compile_model(mdx, args)
             self.model.append( mdx )
+
+            log_dir = "logs/fit/model-" + str(n)
+            tensorboard_callback = tf.keras.callbacks.TensorBoard( \
+                log_dir=log_dir,update_freq='epoch')
+            self.cbacks.append ( tensorboard_callback )
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
@@ -484,7 +500,7 @@ def train_epd(myNet,args,myEpd,start=1):
                 if len(examples) > 0:
                     print("Time", int(end_t - start_t), "sec")
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                    myNet.train(examples,args)
+                    myNet.train(examples,(chunk-1)*NBATCH,args)
 
                     start_t = time.time()
                     if chunk % args.rsavo == 0:
@@ -509,7 +525,8 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
     parser.add_argument('--dir', dest='dir', required=False, default="nets", help='Path to network files')
-    parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural network to load.')
+    parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural networks to load.')
+    parser.add_argument('--global-steps', dest='global_steps', required=False, type=int, default=0, help='Global number of steps trained so far.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=BATCH_SIZE, help='Training batch size.')
     parser.add_argument('--nbatch',dest='nbatch', required=False, type=int, default=NBATCH, help='Number of batches to process at one time.')
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
