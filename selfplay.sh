@@ -402,9 +402,9 @@ calc_global_steps() {
     ND=$((NREPLAY/G))
 
     if [ "$ND" -le "$V" ]; then
-        GLOBAL_STEPS=$(( ((NSTEPS*(ND+1)) / 2) + (V-ND)*NSTEPS ))
+        GLOBAL_STEPS=$(( (NSTEPS*(V)*(V+1)) / (2*ND) ))
     else
-        GLOBAL_STEPS=$(( (NSTEPS*(V+1)*(V+2)) / (2*ND) ))
+        GLOBAL_STEPS=$(( NSTEPS * ((ND+1)*ND - (V+1)*2) / (2 * ND) ))
     fi
 
     echo "Global number of steps trained so far: " $GLOBAL_STEPS
@@ -462,9 +462,9 @@ selfplay_loop() {
 
         prepare
 
+        calc_global_steps
         echo 'Training new net from net ID = ' $V
         time train
-        calc_global_steps
 
         fornets conv
 

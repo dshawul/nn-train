@@ -6,8 +6,8 @@ import resnet
 import argparse
 import gzip
 import numpy as np
-import multiprocessing
-from joblib import Parallel, delayed, dump, load
+import multiprocessing as mp
+from joblib import Parallel, delayed
 
 #import tensorflow and set logging level
 import os
@@ -68,6 +68,9 @@ def fill_planes(iplanes, b):
 
     #flip horizontal
     flip_file = (chess.square_file(b.king(pl)) < 4)
+
+    #zero planes
+    iplanes[:, :, 0:24] = 0.0
 
     #white piece attacks
     bb = b.kings   & b.occupied_co[pl]
@@ -204,7 +207,7 @@ def fill_planes_fen(iplanes, fen, player):
     iplanes[:, :, CHANNELS - 1] = 1.0
 
 
-def fill_examples(examples,iplane,opolicy,oresult,ovalue):
+def fill_examples(examples,iplanes,opolicy,oresult,ovalue):
     if AUX_INP:
         bb = chess.Board()
 
@@ -266,6 +269,7 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
                 ovalue[id,result] += FRAC_Z
 
         #policy
+        opolicy[id,:] = 0.0
         for i in range(offset, offset+nmoves*2, 2):
             opolicy[id, int(words[i])] = float(words[i+1])
         offset += nmoves*2
@@ -277,9 +281,9 @@ def fill_examples(examples,iplane,opolicy,oresult,ovalue):
 
         #input planes
         if AUX_INP:
-            fill_planes(iplane[id,:,:,:],bb)
+            fill_planes(iplanes[id,:,:,:],bb)
         else:
-            fill_planes_fen(iplane[id,:,:,:],epd,words,player)
+            fill_planes_fen(iplanes[id,:,:,:],epd,words,player)
 
 def build_model(cid):
     INPUT_SHAPE=(None, None, CHANNELS)
@@ -347,26 +351,11 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,examples,local_steps,args):
+    def train(self,examples,local_steps,args,ipln,opol,ores,oval):
         print("Generating input planes using", args.cores, "cores")
         start_t = time.time()
 
         N = len(examples)
-
-        #memmap
-        folder = './joblib_memmap'
-
-        ipln_memmap = os.path.join(folder, 'ipln_memmap')
-        ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
-
-        opol_memmap = os.path.join(folder, 'opol_memmap')
-        opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),mode='w+')
-
-        ores_memmap = os.path.join(folder, 'ores_memmap')
-        ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
-
-        oval_memmap = os.path.join(folder, 'oval_memmap')
-        oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,3),mode='w+')
 
         #multiprocess
         nlen = N / args.cores
@@ -463,6 +452,23 @@ class NNet():
 
 def train_epd(myNet,args,myEpd,start=1):
 
+    #memmap
+    folder = './joblib_memmap'
+
+    N = EPD_CHUNK_SIZE
+
+    ipln_memmap = os.path.join(folder, 'ipln_memmap')
+    ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
+
+    opol_memmap = os.path.join(folder, 'opol_memmap')
+    opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),mode='w+')
+
+    ores_memmap = os.path.join(folder, 'ores_memmap')
+    ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
+
+    oval_memmap = os.path.join(folder, 'oval_memmap')
+    oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,3),mode='w+')
+
     with (open(myEpd) if not args.gzip else gzip.open(myEpd)) as file:
         count = 0
 
@@ -500,7 +506,7 @@ def train_epd(myNet,args,myEpd,start=1):
                 if len(examples) > 0:
                     print("Time", int(end_t - start_t), "sec")
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                    myNet.train(examples,(chunk-1)*NBATCH,args)
+                    myNet.train(examples,(chunk-1)*NBATCH,args,ipln,opol,ores,oval)
 
                     start_t = time.time()
                     if chunk % args.rsavo == 0:
@@ -532,7 +538,7 @@ def main(argv):
     parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
     parser.add_argument('--validation-split',dest='vald_split', required=False, type=float, default=0.125, help='Fraction of sample to use for validation.')
-    parser.add_argument('--cores',dest='cores', required=False, type=int, default=multiprocessing.cpu_count(), help='Number of cores to use.')
+    parser.add_argument('--cores',dest='cores', required=False, type=int, default=mp.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[0,1,2], \
