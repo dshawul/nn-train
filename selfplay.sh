@@ -402,9 +402,9 @@ calc_global_steps() {
     ND=$((NREPLAY/G))
 
     if [ "$ND" -le "$V" ]; then
-        GLOBAL_STEPS=$(( (NSTEPS*(V)*(V+1)) / (2*ND) ))
+        GLOBAL_STEPS=$(( (NSTEPS * (2*V-ND+1)) / 2 ))
     else
-        GLOBAL_STEPS=$(( NSTEPS * ((ND+1)*ND - (V+1)*2) / (2 * ND) ))
+        GLOBAL_STEPS=$(( (NSTEPS*(V)*(V+1)) / (2*ND) ))
     fi
 
     echo "Global number of steps trained so far: " $GLOBAL_STEPS

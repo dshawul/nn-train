@@ -69,9 +69,6 @@ def fill_planes(iplanes, b):
     #flip horizontal
     flip_file = (chess.square_file(b.king(pl)) < 4)
 
-    #zero planes
-    iplanes[:, :, 0:24] = 0.0
-
     #white piece attacks
     bb = b.kings   & b.occupied_co[pl]
     fill_piece(iplanes,0,bb,b,flip_file)
@@ -207,9 +204,15 @@ def fill_planes_fen(iplanes, fen, player):
     iplanes[:, :, CHANNELS - 1] = 1.0
 
 
-def fill_examples(examples,iplanes,opolicy,oresult,ovalue):
+def fill_examples(examples):
     if AUX_INP:
         bb = chess.Board()
+
+    N = len(examples)
+    iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+    opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+    oresult = np.zeros(shape=(N,),dtype=np.int)
+    ovalue = np.zeros(shape=(N,3),dtype=np.float32)
 
     for id,line in enumerate(examples):
 
@@ -269,7 +272,6 @@ def fill_examples(examples,iplanes,opolicy,oresult,ovalue):
                 ovalue[id,result] += FRAC_Z
 
         #policy
-        opolicy[id,:] = 0.0
         for i in range(offset, offset+nmoves*2, 2):
             opolicy[id, int(words[i])] = float(words[i+1])
         offset += nmoves*2
@@ -284,6 +286,8 @@ def fill_examples(examples,iplanes,opolicy,oresult,ovalue):
             fill_planes(iplanes[id,:,:,:],bb)
         else:
             fill_planes_fen(iplanes[id,:,:,:],epd,words,player)
+
+    return [iplanes, opolicy, oresult, ovalue]
 
 def build_model(cid):
     INPUT_SHAPE=(None, None, CHANNELS)
@@ -351,7 +355,7 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,examples,local_steps,args,ipln,opol,ores,oval):
+    def train(self,examples,local_steps,args):
         print("Generating input planes using", args.cores, "cores")
         start_t = time.time()
 
@@ -360,12 +364,22 @@ class NNet():
         #multiprocess
         nlen = N / args.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
-        Parallel(n_jobs=args.cores)( delayed(fill_examples) (                      \
-            examples[sl],ipln[sl,:,:,:],opol[sl,:],ores[sl],oval[sl,:]  \
-            ) for sl in slices )
+        res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
+
+        ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+        opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ores = np.zeros(shape=(N,),dtype=np.int)
+        oval = np.zeros(shape=(N,3),dtype=np.float32)
+
+        for i in range(args.cores):
+            ipln[slices[i],:,:,:] = res[i][0]
+            opol[slices[i],:] = res[i][1]
+            ores[slices[i]] = res[i][2]
+            oval[slices[i],:] = res[i][3]
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
+
         
         start_t = end_t
         vweights = None
@@ -452,23 +466,6 @@ class NNet():
 
 def train_epd(myNet,args,myEpd,start=1):
 
-    #memmap
-    folder = './joblib_memmap'
-
-    N = EPD_CHUNK_SIZE
-
-    ipln_memmap = os.path.join(folder, 'ipln_memmap')
-    ipln = np.memmap(ipln_memmap,dtype=np.float32,shape=(N,BOARDY,BOARDX,CHANNELS),mode='w+')
-
-    opol_memmap = os.path.join(folder, 'opol_memmap')
-    opol = np.memmap(opol_memmap,dtype=np.float32,shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),mode='w+')
-
-    ores_memmap = os.path.join(folder, 'ores_memmap')
-    ores = np.memmap(ores_memmap,dtype=np.int,shape=(N,),mode='w+')
-
-    oval_memmap = os.path.join(folder, 'oval_memmap')
-    oval = np.memmap(oval_memmap,dtype=np.float32,shape=(N,3),mode='w+')
-
     with (open(myEpd) if not args.gzip else gzip.open(myEpd)) as file:
         count = 0
 
@@ -506,7 +503,7 @@ def train_epd(myNet,args,myEpd,start=1):
                 if len(examples) > 0:
                     print("Time", int(end_t - start_t), "sec")
                     print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                    myNet.train(examples,(chunk-1)*NBATCH,args,ipln,opol,ores,oval)
+                    myNet.train(examples,(chunk-1)*NBATCH,args)
 
                     start_t = time.time()
                     if chunk % args.rsavo == 0:
@@ -609,10 +606,6 @@ def main(argv):
     if args.rand:
         myNet.save_checkpoint(chunk, args)
     else:
-        folder = './joblib_memmap'
-        if not os.path.isdir(folder):
-            os.mkdir(folder)
-
         start = chunk * EPD_CHUNK_SIZE + 1
         train_epd(myNet, args, args.epd, start)
 

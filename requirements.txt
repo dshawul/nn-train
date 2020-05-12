@@ -1,0 +1,4 @@
+tensorflow-gpu==1.14.0
+tensorboard==1.14.0
+joblib==0.11
+python-chess==0.23.10
