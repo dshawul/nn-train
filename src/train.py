@@ -32,6 +32,7 @@ RANK_U = BOARDY - 1
 FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
+HEAD_TYPE = 0
 
 def fill_piece(iplanes, ix, bb, b, flip_file):
 
@@ -210,9 +211,18 @@ def fill_examples(examples):
 
     N = len(examples)
     iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-    opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
     ovalue = np.zeros(shape=(N,3),dtype=np.float32)
+    if HEAD_TYPE == 0:
+        opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ret = [iplanes, oresult, ovalue, opolicy]
+    elif HEAD_TYPE == 1:
+        oscore = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ret = [iplanes, oresult, ovalue, oscore]
+    else:
+        opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        oscore = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ret = [iplanes, oresult, ovalue, opolicy, oscore]
 
     for id,line in enumerate(examples):
 
@@ -272,14 +282,33 @@ def fill_examples(examples):
                 ovalue[id,result] += FRAC_Z
 
         #policy
-        for i in range(offset, offset+nmoves*2, 2):
-            opolicy[id, int(words[i])] = float(words[i+1])
-        offset += nmoves*2
+        V = (1.0 - result / 2.0)
+        V=max(V,1e-5)
+
+        if HEAD_TYPE == 0:
+            for i in range(offset, offset+nmoves*2, 2):
+                opolicy[id, int(words[i])] = float(words[i+1])
+            offset += nmoves*2
+        elif HEAD_TYPE == 1:
+            for i in range(offset, offset+nmoves*2, 2):
+                oscore[id, int(words[i])] = float(words[i+1])
+            offset += nmoves*2
+        else:
+            for i in range(offset, offset+nmoves*3, 3):
+                opolicy[id, int(words[i])] = float(words[i+1])
+                oscore[id, int(words[i])] = float(words[i+2])
+            offset += nmoves*3
 
         if (FRAC_PI < 1) and (offset < len(words)):
             bestm = int(words[offset])
             opolicy[id, :] *= FRAC_PI
-            opolicy[id, bestm] += (1 - FRAC_PI)
+            if HEAD_TYPE == 0:
+                opolicy[id, bestm] += (1 - FRAC_PI)
+            elif HEAD_TYPE == 1:
+                oscore[id, bestm] += (1 - FRAC_PI) * V
+            else:
+                opolicy[id, bestm] += (1 - FRAC_PI)
+                oscore[id, bestm] += (1 - FRAC_PI) * V
 
         #input planes
         if AUX_INP:
@@ -287,20 +316,20 @@ def fill_examples(examples):
         else:
             fill_planes_fen(iplanes[id,:,:,:],epd,words,player)
 
-    return [iplanes, opolicy, oresult, ovalue]
+    return ret
 
 def build_model(cid):
     INPUT_SHAPE=(None, None, CHANNELS)
     if cid == 0:
-        return resnet.build_net(INPUT_SHAPE,  2,  32, POLICY_CHANNELS)
+        return resnet.build_net(INPUT_SHAPE,  2,  32, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 1:
-        return resnet.build_net(INPUT_SHAPE,  6,  64, POLICY_CHANNELS)
+        return resnet.build_net(INPUT_SHAPE,  6,  64, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 2:
-        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS)
+        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 3:
-        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS)
+        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 40, 256, POLICY_CHANNELS)
+        return resnet.build_net(INPUT_SHAPE, 40, 256, POLICY_CHANNELS, HEAD_TYPE)
     else:
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
@@ -332,6 +361,7 @@ class NNet():
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
+        # losses and accuracy
         def loss(y_true, y_pred):
             is_legal = tf.greater(y_true, 0)
             y_pred = tf.where(is_legal, y_pred, y_true)
@@ -342,11 +372,30 @@ class NNet():
             y_pred = tf.where(is_legal, y_pred, y_true)
             return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
 
-        losses = {"value":'categorical_crossentropy', "policya":loss}
-        metrics = {"value":'accuracy', "policya":accuracy}
+        def sloss(y_true, y_pred):
+            is_legal = tf.greater(y_true, 0)
+            y_pred = tf.where(is_legal, y_pred, y_true)
 
-        loss_weights = [args.val_w, args.pol_w]
+            su = tf.reduce_sum(tf.cast(is_legal, tf.float32))
+            sz = tf.cast(tf.size(is_legal), tf.float32)
+            return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
 
+        if HEAD_TYPE == 0:
+            losses = {"value":'categorical_crossentropy', "policya":loss}
+            metrics = {"value":'accuracy', "policya":accuracy}
+            loss_weights = [args.val_w, args.pol_w]
+
+        elif HEAD_TYPE == 1:
+            losses  = {"value":'categorical_crossentropy', "scorea":sloss}
+            metrics = {"value":'accuracy'}
+            loss_weights = [args.val_w, args.score_w]
+
+        else:
+            losses  = {"value":'categorical_crossentropy', "policya":loss, "scorea":sloss}
+            metrics = {"value":'accuracy', "policya":accuracy}
+            loss_weights = [args.val_w, args.pol_w, args.score_w]
+
+        # compile model
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
                 mdx.compile(loss=losses,loss_weights=loss_weights,
@@ -366,21 +415,36 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
         res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
+        #accumulate
         ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-        opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
         oval = np.zeros(shape=(N,3),dtype=np.float32)
+        if HEAD_TYPE == 0:
+            opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            y = [oval, opol]
+        elif HEAD_TYPE == 1:
+            osco = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            y = [oval, osco]
+        else:
+            opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            osco = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            y = [oval, opol, osco]
 
         for i in range(args.cores):
             ipln[slices[i],:,:,:] = res[i][0]
-            opol[slices[i],:] = res[i][1]
-            ores[slices[i]] = res[i][2]
-            oval[slices[i],:] = res[i][3]
+            ores[slices[i]] = res[i][1]
+            oval[slices[i],:] = res[i][2]
+            if HEAD_TYPE == 0:
+                opol[slices[i],:] = res[i][3]
+            elif HEAD_TYPE == 1:
+                osco[slices[i],:] = res[i][3]
+            else:
+                opol[slices[i],:] = res[i][3]
+                osco[slices[i],:] = res[i][4]
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
 
-        
         start_t = end_t
         vweights = None
         pweights = None
@@ -396,7 +460,7 @@ class NNet():
             epochs = initial_epoch + args.epochs
 
             if args.pol_grad > 0:
-                self.model[i].fit(x = [ipln], y = [oval, opol],
+                self.model[i].fit(x = [ipln], y = y,
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
                       validation_split=args.vald_split,
@@ -404,7 +468,7 @@ class NNet():
                       epochs=epochs,
                       callbacks=[tensorboard_callback])
             else:
-                self.model[i].fit(x = [ipln], y = [oval, opol],
+                self.model[i].fit(x = [ipln], y = y,
                       batch_size=BATCH_SIZE,
                       validation_split=args.vald_split,
                       initial_epoch=initial_epoch,
@@ -491,7 +555,7 @@ def train_epd(myNet,args,myEpd,start=1):
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
                 chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
                 end_t = time.time()
-                
+
                 #make sure size is divisible by BATCH_SIZE
                 if (not line) and (count % BATCH_SIZE != 0): 
                    count = (count//BATCH_SIZE)*BATCH_SIZE
@@ -523,7 +587,7 @@ def train_epd(myNet,args,myEpd,start=1):
 
 def main(argv):
     global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
-    global POLICY_CHANNELS,  NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U
+    global POLICY_CHANNELS,  NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
@@ -547,6 +611,7 @@ def main(argv):
     parser.add_argument('--policy-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
     parser.add_argument('--policy-weight',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
     parser.add_argument('--value-weight',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')
+    parser.add_argument('--score-weight',dest='score_w', required=False, type=float, default=1.0, help='Score loss weight.')
     parser.add_argument('--policy-gradient',dest='pol_grad', required=False, type=int, default=0, help='0=standard 1=multiply policy by score.')
     parser.add_argument('--no-auxinp','-u',dest='noauxinp', required=False, action='store_false', help='Don\'t use auxillary input')
     parser.add_argument('--channels','-c', dest='channels', required=False, type=int, default=CHANNELS, help='number of input channels of network.')
@@ -556,6 +621,7 @@ def main(argv):
     parser.add_argument('--frac-pi',dest='frac_pi', required=False, type=float, default=FRAC_PI, help='Fraction of MCTS policy (PI) relative to one-hot policy(P).')
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
+    parser.add_argument('--head-type',dest='head', required=False, type=int, default=HEAD_TYPE, help='Heads of neural network, 0=value/policy, 1=value/score.')
 
     args = parser.parse_args()
 
@@ -583,6 +649,7 @@ def main(argv):
     FRAC_Z = args.frac_z
     FRAC_PI = args.frac_pi
     PIECE_MAP = args.pcmap
+    HEAD_TYPE = args.head
 
     chunk = args.id
 

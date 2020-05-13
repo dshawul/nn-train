@@ -130,7 +130,7 @@ def build_post_net(x, blocks,filters):
 
     return x
 
-def build_pre_net(x, blocks,filters):
+def build_pre_net(x, blocks,filters, pol_channels):
 
     for i in range(blocks-1):
         inp = x
@@ -147,7 +147,42 @@ def build_pre_net(x, blocks,filters):
 
     return x
 
-def build_net(main_input_shape,  blocks, filters, pol_channels):
+def value_head(x):
+
+    vx = conv_bn_relu(x,128,1,False,"value")
+    vx = pool_layer(vx,"value")
+
+    # value head
+    x = Flatten(name='value_flatten')(vx)
+    x = dense(x, 128, "value_dense_1")
+    x = dense(x, 32, "value_dense_3")
+    value = dense(x, 3, "value", act='softmax')
+
+    return value
+
+def policy_head(x, filters, pol_channels):
+
+    px = conv_bn_relu(x,filters,3,False,"policy_1")
+    px = conv_bn(px,pol_channels,1,True,"policy_2")
+
+    # policy head
+    x = Reshape((-1,), name='policy')(px)
+    policy = Activation("softmax", name='policya')(x)
+
+    return policy
+
+def score_head(x, filters, pol_channels):
+
+    px = conv_bn_relu(x,filters,3,False,"score_1")
+    px = conv_bn(px,pol_channels,1,True,"score_2")
+
+    # score head
+    x = Reshape((-1,), name='score')(px)
+    score = Activation("sigmoid", name='scorea')(x)
+
+    return score
+
+def build_net(main_input_shape,  blocks, filters, pol_channels, HEAD_TYPE):
 
     main_input = Input(shape=main_input_shape, name='main_input')
     x = main_input
@@ -161,23 +196,22 @@ def build_net(main_input_shape,  blocks, filters, pol_channels):
     else:
         x = build_post_net(x, blocks, filters)
 
-    # value and policy head convolutions
-    vx = conv_bn_relu(x,128,1,False,"value")
-    vx = pool_layer(vx,"value")
+    #value
+    value = value_head(x)
 
-    px = conv_bn_relu(x,filters,3,False,"policy_1")
-    px = conv_bn_relu(px,pol_channels,1,True,"policy_2")
+    #policy
+    if HEAD_TYPE == 0:
+        policy = policy_head(x, filters, pol_channels)
+        outputs = [value, policy]
+    elif HEAD_TYPE == 1:
+        score = score_head(x, filters, pol_channels)
+        outputs = [value, score]
+    else:
+        policy = policy_head(x, filters, pol_channels)
+        score = score_head(x, filters, pol_channels)
+        outputs = [value, policy, score]
 
-    # value head
-    x = Flatten(name='value_flatten')(vx)
-    x = dense(x, 128, "value_dense_1")
-    x = dense(x, 32, "value_dense_3")
-    value = dense(x, 3, "value", act='softmax')
+    #model
+    model = Model(inputs=[main_input], outputs=outputs)
 
-    # policy head
-    x = Reshape((-1,), name='policy')(px)
-    policy = Activation("softmax", name='policya')(x)
-
-    # model
-    model = Model(inputs=[main_input], outputs=[value, policy])
     return model

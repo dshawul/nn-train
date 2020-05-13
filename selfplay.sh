@@ -43,6 +43,7 @@ NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
 PIECE_MAP="KQRBNPkqrbnp"
+HEAD_TYPE=0
 
 if [ $DISTILL != 0 ]; then
   FRAC_Z=0
@@ -185,7 +186,7 @@ init0() {
 init() {
     python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
             ${NOAUXINP} --channels ${CHANNELS} --policy-channels ${POL_CHANNELS} \
-            --boardx ${BOARDX} --boardy ${BOARDY}
+            --boardx ${BOARDX} --boardy ${BOARDY} --head-type ${HEAD_TYPE}
     ./scripts/prepare.sh ${NETS_DIR} 0 $1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
 }
@@ -274,7 +275,8 @@ train() {
        --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} \
        --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
-       --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} ${NOAUXINP}
+       --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} --head-type ${HEAD_TYPE} \
+       ${NOAUXINP}
 }
 
 #move
