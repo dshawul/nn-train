@@ -618,10 +618,12 @@ def main(argv):
     parser.add_argument('--boardx','-x', dest='boardx', required=False, type=int, default=BOARDX, help='board x-dimension.')
     parser.add_argument('--boardy','-y', dest='boardy', required=False, type=int, default=BOARDY, help='board y-dimension.')
     parser.add_argument('--frac-z',dest='frac_z', required=False, type=float, default=FRAC_Z, help='Fraction of ouctome(Z) relative to MCTS value(Q).')
-    parser.add_argument('--frac-pi',dest='frac_pi', required=False, type=float, default=FRAC_PI, help='Fraction of MCTS policy (PI) relative to one-hot policy(P).')
+    parser.add_argument('--frac-pi',dest='frac_pi', required=False, type=float, default=FRAC_PI, \
+        help='Fraction of MCTS policy (PI) relative to one-hot policy(P).')
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
-    parser.add_argument('--head-type',dest='head', required=False, type=int, default=HEAD_TYPE, help='Heads of neural network, 0=value/policy, 1=value/score.')
+    parser.add_argument('--head-type',dest='head_type', required=False, type=int, default=HEAD_TYPE, \
+        help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three.')
 
     args = parser.parse_args()
 
@@ -649,7 +651,7 @@ def main(argv):
     FRAC_Z = args.frac_z
     FRAC_PI = args.frac_pi
     PIECE_MAP = args.pcmap
-    HEAD_TYPE = args.head
+    HEAD_TYPE = args.head_type
 
     chunk = args.id
 

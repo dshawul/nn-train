@@ -1,8 +1,7 @@
 #!/bin/bash
 NDIR=$1
 SDIR=$( dirname ${BASH_SOURCE[0]} )
-V=value/BiasAdd
-P=policy/Reshape
+OUT="-O value/BiasAdd -O policy/Reshape -O score/Reshape"
 if [ -z "$3" ]; then
    RN=$(seq 0 3)
 else
@@ -10,7 +9,7 @@ else
 fi
 for i in $RN; do
    $SDIR/convert-to-pb.sh ${NDIR}/ID-$2-model-$i ${NDIR}/infer-$i
-   convert-to-uff $NDIR/ID-$2-model-$i.pb -O $V -O $P
+   convert-to-uff $NDIR/ID-$2-model-$i.pb ${OUT}
 done
 if [ -z "$3" ]; then
   cp ${NDIR}/ID-$2-model-0.pb ${NDIR}/net-2x32.pb
