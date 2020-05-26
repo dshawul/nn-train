@@ -191,6 +191,7 @@ init0() {
     mkdir -p ${NETS_DIR}/train
     mkdir -p ${NETS_DIR}/matches
     touch ${NETS_DIR}/pltdata
+    touch ${NETS_DIR}/description.txt
 }
 
 #initialize random network
@@ -200,6 +201,7 @@ init() {
             --boardx ${BOARDX} --boardy ${BOARDY} --head-type ${HEAD_TYPE}
     ./scripts/prepare.sh ${NETS_DIR} 0 $1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
+    ln -sf ${NETS_DIR}/infer-$1 ${NETS_DIR}/hist/infer-$1
 }
 
 #loop over all nets

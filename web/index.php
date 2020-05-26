@@ -69,10 +69,16 @@ foreach( $files as $i=>$f ) {
 
 <nav>
 <p>
-I have started a new big run on May 4, 2020 of my existing supervized trained networks.
-I am training all 4 networks, 2x32,6x64,12x128 and 20x256, at the same time with the 20b used for 
-selfplay game generation. The supervized net is already strong so selfplay training is started with an 
-LR = 0.006.
+<?php
+$file = fopen("$NET/description.txt","r");
+
+while(! feof($file))
+  {
+  echo fgets($file);
+  }
+
+fclose($file);
+?>
 </p>
 </nav>
 
