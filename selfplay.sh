@@ -134,25 +134,35 @@ conduct_match() {
     MH=`find ${NETS_DIR}/hist/ID-*-model-$1.pb -type f | \
       sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
 
-    if [ $GPUS -gt 0 ]; then
-       ND1=${NETS_DIR}/hist/ID-$3-model-$1.uff
-       ND2=${NETS_DIR}/hist/ID-$2-model-$1.uff
-    else
-       ND1=${NETS_DIR}/hist/ID-$3-model-$1.pb
-       ND2=${NETS_DIR}/hist/ID-$2-model-$1.pb
-    fi
+    ND1=${NETS_DIR}/hist/ID-$3-model-$1
+    ND2=${NETS_DIR}/hist/ID-$2-model-$1
 
     if [ ! -f "$ND1" ] || [ ! -f "$ND2" ]; then
        exit 0
+    fi
+
+    if [ ! -f "$ND1.pb" ]; then
+       ./scripts/prepare.sh ${NETS_DIR}/hist $3 $1
+    fi
+    if [ ! -f "$ND2.pb" ]; then
+       ./scripts/prepare.sh ${NETS_DIR}/hist $2 $1
+    fi
+
+    if [ $GPUS -gt 0 ]; then
+       ND1=${ND1}.uff
+       ND2=${ND2}.uff
+    else
+       ND1=${ND1}.pb
+       ND2=${ND2}.pb
     fi
 
     cd $CUTECHESS
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 backup_type 7 nn_type 0 nn_path ${ND1}" name=scorpio-$3 \
+		arg="sv 800 nn_type 0 nn_path ${ND1} alphabeta_man_c 0" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 backup_type 7 nn_type 0 nn_path ${ND2}" name=scorpio-$2 \
+		arg="sv 800 nn_type 0 nn_path ${ND2} alphabeta_man_c 0" name=scorpio-$2 \
         -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
     cd -
