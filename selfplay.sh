@@ -44,7 +44,7 @@ NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
 PIECE_MAP="KQRBNPkqrbnp"
-HEAD_TYPE=2
+HEAD_TYPE=0
 
 if [ $DISTILL != 0 ]; then
   FRAC_Z=0
@@ -131,9 +131,6 @@ fi
 #conduct matches
 ###################
 conduct_match() {
-    MH=`find ${NETS_DIR}/hist/ID-*-model-$1.pb -type f | \
-      sed 's/[ \t]*\([0-9]\{1,\}\).*/\1/' | grep -o [0-9]* | sort -rn | head -1`
-
     ND1=${NETS_DIR}/hist/ID-$3-model-$1
     ND2=${NETS_DIR}/hist/ID-$2-model-$1
 
@@ -160,12 +157,12 @@ conduct_match() {
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND1} alphabeta_man_c 0" name=scorpio-$3 \
+		arg="sv 800 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND2} alphabeta_man_c 0" name=scorpio-$2 \
+		arg="sv 800 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
         -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
-    cd -
+    cd - > /dev/null 2>&1
 
     cat ${CUTECHESS}/match.pgn >> ${NETS_DIR}/matches/match$2-$3.pgn
     rm -rf ${CUTECHESS}/match.pgn
@@ -275,12 +272,12 @@ rungames() {
     else
         NETW=""
     fi
-    SCOPT="train_data_type ${HEAD_TYPE} trade_penalty 0 alphabeta_man_c 0 min_policy_value 0 \
-	   reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
+    SCOPT="train_data_type ${HEAD_TYPE} alphabeta_man_c 0 min_policy_value 0 \
+           reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
            backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
     ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
 	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
-    time ${MPICMD} ${SDIR}/nn-dist/scripts/job-one.sh ./${EXE} ${ALLOPT}
+    time ${MPICMD} ./${EXE} ${ALLOPT}
 }
 
 #train network

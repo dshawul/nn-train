@@ -1,7 +1,7 @@
 #!/bin/bash
 NDIR=$1
 SDIR=$( dirname ${BASH_SOURCE[0]} )
-OUT="-O value/BiasAdd -O policy/Reshape -O score/Reshape"
+OUT="-O value/BiasAdd -O policy/Reshape"
 if [ -z "$3" ]; then
    RN=$(seq 0 3)
 else

@@ -1,7 +1,7 @@
 #!/bin/bash
 BNAME=$( basename $1 )
 DNAME=$( dirname $1 )
-NOUT=3
+NOUT=2
 if [ -z "$2" ]; then
 	IM=
 else
