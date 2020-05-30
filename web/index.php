@@ -1,47 +1,20 @@
 <!DOCTYPE HTML>
 <html>
-
-<head>  
-<link rel="stylesheet" type="text/css" href="mystyle.css">
-</head>
-
 <body>
 
-<header>
-<h2>ScorpioZero Neural Network Training.</h2>
-</header>
-
-<nav>
-<p>
-Welcome to the ScorpioZero training server. <br>
-</p>
+<head>  
+<link rel="stylesheet" type="text/css" href="common.css">
+</head>
 
 <?php
-include "common.php";
+include "navigation.php"
 ?>
 
-<p>
-<a href="http://scorpiozero.ddns.net/users.php">List of users</a> <br>
-<a href="http://scorpiozero.ddns.net/contrib.php">Contributions of users</a> <br>
-<a href="http://scorpiozero.ddns.net/work.php">Active training runs</a> <br>
-<a href="http://scorpiozero.ddns.net/scorpiozero">Download networks and training data</a> <br>
-<a href=<?php echo "http://scorpiozero.ddns.net/matches.php?runid=".$NET; ?> >View matches between networks</a> <br>
-</p>
+<article>
+<div id="chartContainer"></div>
+</article>
 
-<p>
-Github pages. <br>
-</p>
-
-<a href="https://github.com/dshawul/nn-dist">Client for training</a> <br>
-<a href="https://github.com/dshawul/nn-train">Server for training</a> <br>
-<a href="https://github.com/dshawul/nn-probe">Probing code</a> <br>
-
-<p>
-Discussion. <br>
-</p>
-
-<a href="https://groups.google.com/forum/#!forum/scorpiozero">Discussion forum</a> <br>
-
+<nav>
 <p>
 Select test run to display <br>
 </p>
@@ -60,14 +33,6 @@ foreach( $files as $i=>$f ) {
 }
 ?>
 </select>
-
-</nav>
-
-<article>
-<div id="chartContainer"></div>
-</article>
-
-<nav>
 <p>
 <?php
 $file = fopen("$NET/description.txt","r");
@@ -82,9 +47,11 @@ fclose($file);
 </p>
 </nav>
 
+<!--
 <footer>
 <p>..</p>
 </footer>
+--!>
 
 <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
 

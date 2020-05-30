@@ -6,15 +6,15 @@
 
 <BODY> 
 
-<SCRIPT LANGUAGE="JavaScript">
-</SCRIPT>
-
 <H2> ScorpioZero training games<br>
 <font size="2">
 (courtesy of <a target="v" href="http://chesstempo.com">Chess Tempo)</a>
 </H2>
 
 <font size="3">
+
+<SCRIPT LANGUAGE="JavaScript">
+</SCRIPT>
 
 <!-- Support libraries from Yahoo YUI project -->
 <script type="text/javascript"
@@ -52,7 +52,6 @@
    }
  );
 </script>
-
 
 <style type="text/css"/>
 

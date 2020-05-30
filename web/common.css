@@ -1,9 +1,9 @@
 * {
   box-sizing: border-box;
 }
-
 body {
   font-family: Arial, Helvetica, sans-serif;
+  background-color: #ccc;
 }
 
 header {
@@ -14,31 +14,19 @@ header {
   font-size: 15px;
   color: white;
 }
-
 nav {
   float: left;
   width: 20%;
-  height: 654px;
-  background: #ccc;
+  height: 100%;
+  background-color: #bbb;
   padding: 20px;
 }
-
-
 article {
   float: left;
-  padding: 20px;
   width: 60%;
+  padding: 20px;
   background-color: #ccc;
-  height: 654px;
 }
-
-footer {
-  background-color: #000;
-  padding: 10px;
-  text-align: center;
-  color: white
-}
-
 @media (max-width: 600px) {
   nav, article {
     width: 100%;

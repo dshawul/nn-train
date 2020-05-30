@@ -1,10 +1,19 @@
+<!DOCTYPE html>
 <html>
-
 <body>
-<h2>Netowrk evaluation matches</h2>
+
+<head>  
+<link rel="stylesheet" type="text/css" href="common.css">
+</head>
 
 <?php
-include "common.php";
+include "navigation.php"
+?>
+
+<article>
+<h2>Network evaluation matches</h2>
+
+<?php
 $dir = "$NET/matches/";
 $files = array_diff(scandir($dir), array('.', '..'));
 
@@ -18,6 +27,8 @@ foreach( $files as $i=>$f ) {
 
 echo "</table>\n";
 ?>
+</article>
+
 </body>
 </html>
 

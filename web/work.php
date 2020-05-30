@@ -2,6 +2,15 @@
 <html>
 <body>
 
+<head>  
+<link rel="stylesheet" type="text/css" href="common.css">
+</head>
+
+<?php
+include "navigation.php"
+?>
+
+<article>
 <h2>Active training runs</h2>
 
 <?php
@@ -11,7 +20,7 @@ $dbconn = pg_connect("host=localhost port=5432 dbname=scorpiozero user=postgres 
     or die('Could not connect: ' . pg_last_error());
 
 // Performing SQL query
-$query = 'SELECT * FROM work';
+$query = 'SELECT * FROM work ORDER BY work_id DESC';
 $result = pg_query($query) or die('Query failed: ' . pg_last_error());
 
 // Printing results in HTML
@@ -33,6 +42,7 @@ pg_free_result($result);
 pg_close($dbconn);
 
 ?>
+</article>
 
 </body>
 </html>

@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <html>
-<body>
 
+<head>  
+<link rel="stylesheet" type="text/css" href="common.css">
+</head>
+
+<body>
+<?php
+include "navigation.php"
+?>
+
+<article>
 <h2>List of users</h2>
 
 <?php
@@ -11,7 +20,7 @@ $dbconn = pg_connect("host=localhost port=5432 dbname=scorpiozero user=postgres 
     or die('Could not connect: ' . pg_last_error());
 
 // Performing SQL query
-$query = 'SELECT user_id,username,created_on,last_login FROM users';
+$query = 'SELECT user_id,username,created_on,last_login FROM users ORDER BY last_login DESC';
 $result = pg_query($query) or die('Query failed: ' . pg_last_error());
 
 // Printing results in HTML
@@ -33,6 +42,7 @@ pg_free_result($result);
 pg_close($dbconn);
 
 ?>
+</article>
 
 </body>
 </html>
