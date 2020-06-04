@@ -2,7 +2,7 @@
 
 
 <header>
-<h2>ScorpioZero Neural Network Training.</h2>
+<h2>ScorpioZero Chess Neural Network Training.</h2>
 </header>
 
 <nav>

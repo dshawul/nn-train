@@ -74,7 +74,7 @@ fi
 GLOBAL_STEPS=0
 
 #kill background processes on exit
-trap 'kill $(jobs -p)' EXIT INT
+trap 'pkill -P $$' EXIT INT KILL TERM HUP
 
 #number of cpus and gpus
 CPUS=`grep -c ^processor /proc/cpuinfo`
@@ -251,8 +251,8 @@ if [ $DIST -eq 1 ]; then
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
    send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC} ${HEAD_TYPE} ${RAND_TEMP}
-   send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff
-   send_server network-pb ${NETS_DIR}/ID-0-model-${Pnet}.pb
+   send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff \
+        "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${Pnet}.uff"
    echo "Finished starting server"
 else
    if [ ! -f ${SC}/${EXE} ]; then
