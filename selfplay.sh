@@ -24,9 +24,10 @@ NREPLAY=$((32*G))  # Number of games in the replay buffer
 NSTEPS=2560        # Number of steps
 CPUCT=150          # Cpuct constant
 POL_TEMP=100       # Policy temeprature
+RAND_TEMP=100      # Temperature for random selection of moves
 NOISE_FRAC=25      # Fraction of Dirchilet noise
 POL_GRAD=0         # Use policy gradient algo.
-POL_WEIGHT=1       # Policy weight
+POL_WEIGHT=2       # Policy weight
 SCO_WEIGHT=1       # Score head weight
 VAL_WEIGHT=1       # Value weight
 RSAVO=4096         # Save weights with optimization after this many chunks
@@ -249,7 +250,7 @@ if [ $DIST -eq 1 ]; then
    fi
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
-   send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC} ${HEAD_TYPE}
+   send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC} ${HEAD_TYPE} ${RAND_TEMP}
    send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff
    send_server network-pb ${NETS_DIR}/ID-0-model-${Pnet}.pb
    echo "Finished starting server"
@@ -274,7 +275,7 @@ rungames() {
     fi
     SCOPT="train_data_type ${HEAD_TYPE} alphabeta_man_c 0 min_policy_value 0 \
            reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
-           backup_type 6 policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
+           backup_type 6 rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC}"
     ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
 	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
     time ${MPICMD} ./${EXE} ${ALLOPT}
