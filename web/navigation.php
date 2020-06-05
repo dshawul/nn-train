@@ -23,13 +23,20 @@ Server status: <strong style="color: green;">ACTIVE</strong>  <br>
 </p>
 
 <p>
-Statistics and matches. <br>
+Statistics. <br>
 </p>
 
 <p>
 <a href="http://scorpiozero.ddns.net/users.php">List of users</a> <br>
 <a href="http://scorpiozero.ddns.net/contrib.php">Contributions of users</a> <br>
 <a href="http://scorpiozero.ddns.net/work.php">Active training runs</a> <br>
+</p>
+
+<p>
+Match games. <br>
+</p>
+
+<p>
 <a href=<?php echo "http://scorpiozero.ddns.net/matches.php?runid=".$NET; ?> >View matches between networks</a> <br>
 </p>
 
@@ -48,6 +55,12 @@ Github pages. <br>
 <a href="https://github.com/dshawul/nn-dist">Client for training</a> <br>
 <a href="https://github.com/dshawul/nn-train">Server for training</a> <br>
 <a href="https://github.com/dshawul/nn-probe">Probing code</a> <br>
+
+<p>
+Live help and discussion. <br>
+</p>
+
+<a href="https://discord.gg/BPYhwG">Discord channel</a> <br>
 
 <p>
 Discussion. <br>

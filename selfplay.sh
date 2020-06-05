@@ -307,7 +307,7 @@ conv() {
     for i in $(seq 1 $E); do
        rm -rf ${NETS_DIR}/ID-$i-model-$1
     done
-    ./scripts/prepare.sh ${NETS_DIR} 0 $1
+    ./scripts/prepare.sh ${NETS_DIR} 0 $1 > /dev/null 2>&1
 }
 
 #backup data
@@ -336,6 +336,7 @@ get_selfplay_games() {
 
 #get games from file
 get_file_games() {
+    PLN=0
     while true; do
         sleep ${REFRESH}
         if [ -f ./cgames.pgn ]; then
@@ -343,7 +344,10 @@ get_file_games() {
         else
             LN=0
         fi
-        echo 'Accumulated games: ' $LN of $G
+        if [ $PLN -ne $LN ]; then
+            echo 'Accumulated games: ' $LN of $G
+            PLN=$LN
+        fi
         if [ $LN -ge $G ]; then
             return
         fi    
@@ -474,14 +478,16 @@ prepare() {
 #Selfplay training loop
 selfplay_loop() {
     while true ; do
-
-        prepare
+        echo 'Collecting games'
+        time prepare
 
         calc_global_steps
+
         echo 'Training new net from net ID = ' $V
         time train
 
-        fornets conv
+        echo 'Converting nets to UFF'
+        time fornets conv
 
         V=$((V+1))
 
