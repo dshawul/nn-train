@@ -140,10 +140,10 @@ conduct_match() {
     fi
 
     if [ ! -f "$ND1.pb" ]; then
-       ./scripts/prepare.sh ${NETS_DIR}/hist $3 $1
+       ./scripts/prepare.sh ${NETS_DIR}/hist $3 $1 > /dev/null 2>&1
     fi
     if [ ! -f "$ND2.pb" ]; then
-       ./scripts/prepare.sh ${NETS_DIR}/hist $2 $1
+       ./scripts/prepare.sh ${NETS_DIR}/hist $2 $1 > /dev/null 2>&1
     fi
 
     if [ $GPUS -gt 0 ]; then
@@ -197,7 +197,7 @@ init() {
     python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
             ${NOAUXINP} --channels ${CHANNELS} --policy-channels ${POL_CHANNELS} \
             --boardx ${BOARDX} --boardy ${BOARDY} --head-type ${HEAD_TYPE}
-    ./scripts/prepare.sh ${NETS_DIR} 0 $1
+    ./scripts/prepare.sh ${NETS_DIR} 0 $1 > /dev/null 2>&1
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
     ln -sf ${NETS_DIR}/infer-$1 ${NETS_DIR}/hist/infer-$1
 }

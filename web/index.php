@@ -47,12 +47,6 @@ fclose($file);
 </p>
 </nav>
 
-<!--
-<footer>
-<p>..</p>
-</footer>
---!>
-
 <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
 
 <script>

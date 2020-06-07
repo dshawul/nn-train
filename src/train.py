@@ -666,7 +666,7 @@ def main(argv):
         tf.compat.v1.keras.backend.set_session(sess)
 
     #load networks
-    print("Loadng networks")
+    print("Loading networks: " + (','.join(str(x) for x in args.nets)) )
     start_t = time.time()
     myNet.load_checkpoint(chunk, args)
     end_t = time.time()
