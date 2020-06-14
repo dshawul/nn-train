@@ -16,6 +16,7 @@ include "common.php";
 
 <p>
 Server status: <strong style="color: green;">ACTIVE</strong>  <br>
+<!-- Server status: <strong style="color: red;">DOWN FOR MAINTENANCE</strong>  <br> --!>
 </p>
 
 <p>

@@ -158,9 +158,9 @@ conduct_match() {
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
+		arg="sv 8000 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 800 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
+		arg="sv 8000 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
         -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
     cd - > /dev/null 2>&1
@@ -170,7 +170,7 @@ conduct_match() {
 }
 
 if [ "$1" == "-m" ] || [ "$1" == "--match" ]; then
-    conduct_match $2 $3 $4 200
+    conduct_match $2 $3 $4 100
     calculate_elo
     exit 0
 fi
