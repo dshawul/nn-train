@@ -69,4 +69,10 @@ Discussion. <br>
 
 <a href="https://groups.google.com/forum/#!forum/scorpiozero">Discussion forum</a> <br>
 
+<p>
+Tensorboard graph. <br>
+</p>
+
+<a href="https://scorpiozero.ddns.net:6006">Tensorboard</a> <br>
+
 </nav>
