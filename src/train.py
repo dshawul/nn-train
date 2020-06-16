@@ -375,7 +375,7 @@ class NNet():
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
-            opt = tf.keras.optimizers.SGD(lr=args.lr,momentum=0.9,nesterov=True)
+            opt = tf.keras.optimizers.SGD(lr=args.lr, momentum=0.9, nesterov=True)
         else:
             opt = tf.keras.optimizers.Adam(lr=args.lr)
 

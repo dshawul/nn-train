@@ -30,7 +30,7 @@ POL_GRAD=0         # Use policy gradient algo.
 POL_WEIGHT=2       # Policy weight
 SCO_WEIGHT=1       # Score head weight
 VAL_WEIGHT=1       # Value weight
-RSAVO=1            # Save weights with optimization after this many chunks
+RSAVO=8192         # Save weights with optimization after this many chunks
 FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
 FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
 
@@ -40,7 +40,7 @@ BOARDY=8
 CHANNELS=32
 POL_CHANNELS=16
 NOAUXINP=
-TRNFLGS=
+TRNFLGS="--mixed"
 NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
@@ -483,11 +483,16 @@ selfplay_loop() {
 
         calc_global_steps
 
+        SCPID=`pidof scorpio`
+        $( kill -STOP ${SCPID} ) || true
+
         echo 'Training new net from net ID = ' $V
         time train
 
         echo 'Converting nets to UFF'
         time fornets conv
+
+        $( kill -CONT ${SCPID} ) || true
 
         V=$((V+1))
 
