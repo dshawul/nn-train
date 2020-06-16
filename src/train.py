@@ -334,6 +334,25 @@ def build_model(cid):
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
 
+# losses and accuracy
+def loss(y_true, y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+    return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
+
+def accuracy(y_true,y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+    return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
+
+def sloss(y_true, y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+
+    su = tf.reduce_sum(tf.cast(is_legal, tf.float32))
+    sz = tf.cast(tf.size(is_legal), tf.float32)
+    return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
+
 class NNet():
     def __init__(self,args):
         self.mirrored_strategy = tf.distribute.MirroredStrategy()
@@ -348,9 +367,11 @@ class NNet():
     def load_model(self,fname,compile,args):
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                return tf.keras.models.load_model(fname, compile=compile)
+                return tf.keras.models.load_model(fname, compile=compile,
+                    custom_objects={'loss': loss, 'accuracy':accuracy, 'sloss':sloss})
         else:
-            return tf.keras.models.load_model(fname, compile=compile)
+            return tf.keras.models.load_model(fname, compile=compile,
+                custom_objects={'loss': loss, 'accuracy':accuracy, 'sloss':sloss})
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
@@ -360,25 +381,6 @@ class NNet():
 
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
-
-        # losses and accuracy
-        def loss(y_true, y_pred):
-            is_legal = tf.greater(y_true, 0)
-            y_pred = tf.where(is_legal, y_pred, y_true)
-            return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
-
-        def accuracy(y_true,y_pred):
-            is_legal = tf.greater(y_true, 0)
-            y_pred = tf.where(is_legal, y_pred, y_true)
-            return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
-
-        def sloss(y_true, y_pred):
-            is_legal = tf.greater(y_true, 0)
-            y_pred = tf.where(is_legal, y_pred, y_true)
-
-            su = tf.reduce_sum(tf.cast(is_legal, tf.float32))
-            sz = tf.cast(tf.size(is_legal), tf.float32)
-            return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
 
         if HEAD_TYPE == 0:
             losses = {"value":'categorical_crossentropy', "policya":loss}
