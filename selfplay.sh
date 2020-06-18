@@ -16,7 +16,7 @@ REFRESH=20s
 
 #setup parameters for selfplay
 SV=800             # mcts simulations
-G=16384            # train net after this number of games
+G=32768            # train net after this number of games
 OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
@@ -158,9 +158,9 @@ conduct_match() {
     rm -rf match.pgn
     ./cutechess-cli -concurrency 1 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 8000 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
+		arg="sv 4000 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 8000 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
+		arg="sv 4000 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
         -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
     cd - > /dev/null 2>&1
@@ -345,7 +345,8 @@ get_file_games() {
             LN=0
         fi
         if [ $PLN -ne $LN ]; then
-            echo 'Accumulated games: ' $LN of $G
+            PP=`cat ctrain.epd | wc -l`
+            echo Accumulated: games = $LN of $G, and positions = $PP of $((NSTEPS*BATCH_SIZE))
             PLN=$LN
         fi
         if [ $LN -ge $G ]; then
