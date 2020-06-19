@@ -340,7 +340,7 @@ def loss(y_true, y_pred):
     y_pred = tf.where(is_legal, y_pred, y_true)
     return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
 
-def accuracy(y_true,y_pred):
+def paccuracy(y_true,y_pred):
     is_legal = tf.greater(y_true, 0)
     y_pred = tf.where(is_legal, y_pred, y_true)
     return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
@@ -368,10 +368,10 @@ class NNet():
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
                 return tf.keras.models.load_model(fname, compile=compile,
-                    custom_objects={'loss': loss, 'accuracy':accuracy, 'sloss':sloss})
+                    custom_objects={'loss': loss, 'paccuracy':paccuracy, 'sloss':sloss})
         else:
             return tf.keras.models.load_model(fname, compile=compile,
-                custom_objects={'loss': loss, 'accuracy':accuracy, 'sloss':sloss})
+                custom_objects={'loss': loss, 'paccuracy':paccuracy, 'sloss':sloss})
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
@@ -384,7 +384,7 @@ class NNet():
 
         if HEAD_TYPE == 0:
             losses = {"value":'categorical_crossentropy', "policya":loss}
-            metrics = {"value":'accuracy', "policya":accuracy}
+            metrics = {"value":'accuracy', "policya":paccuracy}
             loss_weights = [args.val_w, args.pol_w]
 
         elif HEAD_TYPE == 1:
@@ -394,7 +394,7 @@ class NNet():
 
         else:
             losses  = {"value":'categorical_crossentropy', "policya":loss, "scorea":sloss}
-            metrics = {"value":'accuracy', "policya":accuracy}
+            metrics = {"value":'accuracy', "policya":paccuracy}
             loss_weights = [args.val_w, args.pol_w, args.score_w]
 
         # compile model

@@ -99,7 +99,10 @@ def convertGraph( modelPath, outdir, numoutputs, prefix, name, inferPath):
 
     if inferPath != None:
         #copy weights
-        opt_model = tf.keras.models.load_model(modelPath)
+        opt_model = tf.keras.models.load_model(modelPath,
+            custom_objects={'loss':'categorical_crossentropy',
+                            'paccuracy':'accuracy',
+                            'sloss':'categorical_crossentropy'})
         net_model = tf.keras.models.load_model(inferPath)
         copy_weights(opt_model, net_model)
 
@@ -109,9 +112,15 @@ def convertGraph( modelPath, outdir, numoutputs, prefix, name, inferPath):
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(0)
         sess = tf.keras.backend.get_session()
-        net_model = tf.keras.models.load_model(modelPath)
+        net_model = tf.keras.models.load_model(modelPath,
+            custom_objects={'loss':'categorical_crossentropy',
+                            'paccuracy':'accuracy',
+                            'sloss':'categorical_crossentropy'})
     else:
-        net_model = tf.keras.models.load_model(modelPath)
+        net_model = tf.keras.models.load_model(modelPath,
+            custom_objects={'loss':'categorical_crossentropy',
+                            'paccuracy':'accuracy',
+                            'sloss':'categorical_crossentropy'})
 
     # Alias the outputs in the model - this sometimes makes them easier to access in TF
     pred = [None]*numoutputs

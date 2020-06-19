@@ -16,7 +16,7 @@ REFRESH=20s
 
 #setup parameters for selfplay
 SV=800             # mcts simulations
-G=32768            # train net after this number of games
+G=24576            # train net after this number of games
 OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
@@ -30,7 +30,7 @@ POL_GRAD=0         # Use policy gradient algo.
 POL_WEIGHT=2       # Policy weight
 SCO_WEIGHT=1       # Score head weight
 VAL_WEIGHT=1       # Value weight
-RSAVO=8192         # Save weights with optimization after this many chunks
+RSAVO=1            # Save weights with optimization after this many chunks
 FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
 FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
 
@@ -40,7 +40,7 @@ BOARDY=8
 CHANNELS=32
 POL_CHANNELS=16
 NOAUXINP=
-TRNFLGS="--mixed"
+TRNFLGS=
 NBATCH=512
 BATCH_SIZE=512
 DISTILL=0
@@ -446,7 +446,12 @@ replay_buffer() {
         shuf -n $((NSTEPS * BATCH_SIZE / ND)) $i >>x
     done
 
-    mv x ${NETS_DIR}/temp.epd
+    if [ $ND -ge 1 ]; then
+        shuf x > ${NETS_DIR}/temp.epd
+        rm -rf x
+    else
+        mv x ${NETS_DIR}/temp.epd
+    fi
 }
 
 #prepare training data
