@@ -37,6 +37,8 @@ FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
 FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
 FORCED_PLAYOUTS=0  # Forced playouts
 POLICY_PRUNING=0   # Policy pruning
+FPU_IS_LOSS=1      # FPU is loss,win or reduction
+FPU_RED=33         # FPU reduction level
 
 #Network parameters
 BOARDX=8
@@ -255,7 +257,7 @@ if [ $DIST -eq 1 ]; then
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
    send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC} ${HEAD_TYPE} ${RAND_TEMP} \
-         ${NOISE_ALPHA} ${NOISE_BETA} ${FORCED_PLAYOUTS} ${POLICY_PRUNING}
+         ${NOISE_ALPHA} ${NOISE_BETA} ${FORCED_PLAYOUTS} ${POLICY_PRUNING} ${FPU_IS_LOSS} ${FPU_RED}
    send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff \
         "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${Pnet}.uff"
    echo "Finished starting server"
@@ -279,7 +281,7 @@ rungames() {
         NETW=""
     fi
     SCOPT="train_data_type ${HEAD_TYPE} alphabeta_man_c 0 min_policy_value 0 \
-           reuse_tree 0 fpu_is_loss 0 fpu_red 0 cpuct_init ${CPUCT} \
+           reuse_tree 0 fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
            backup_type 6 rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
            noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA} forced_playouts ${FORCED_PLAYOUTS} \
            policy_pruning ${POLICY_PRUNING}"
@@ -497,7 +499,9 @@ selfplay_loop() {
         calc_global_steps
 
         SCPID=`pidof scorpio`
-        $( kill -STOP ${SCPID} ) || true
+        if [ ! -z ${SCPID} ]; then
+           $( kill -STOP ${SCPID} ) || true
+        fi
 
         echo 'Training new net from net ID = ' $V
         time train
@@ -505,7 +509,9 @@ selfplay_loop() {
         echo 'Converting nets to UFF'
         time fornets conv
 
-        $( kill -CONT ${SCPID} ) || true
+        if [ ! -z ${SCPID} ]; then
+           $( kill -CONT ${SCPID} ) || true
+        fi
 
         V=$((V+1))
 
