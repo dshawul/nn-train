@@ -21,10 +21,10 @@ OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=1280        # Number of steps
+NSTEPS=640         # Number of steps
 CPUCT=125          # Cpuct constant
-POL_TEMP=120       # Policy temeprature
-RAND_TEMP=80       # Temperature for random selection of moves
+POL_TEMP=110       # Policy temeprature
+RAND_TEMP=90       # Temperature for random selection of moves
 NOISE_FRAC=25      # Fraction of Dirchilet noise
 NOISE_ALPHA=30     # Alpha parameter
 NOISE_BETA=100     # Beta parameter
@@ -37,7 +37,7 @@ FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
 FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
 FORCED_PLAYOUTS=0  # Forced playouts
 POLICY_PRUNING=0   # Policy pruning
-FPU_IS_LOSS=1      # FPU is loss,win or reduction
+FPU_IS_LOSS=0      # FPU is loss,win or reduction
 FPU_RED=33         # FPU reduction level
 
 #Network parameters
@@ -280,9 +280,9 @@ rungames() {
     else
         NETW=""
     fi
-    SCOPT="train_data_type ${HEAD_TYPE} alphabeta_man_c 0 min_policy_value 0 \
-           reuse_tree 0 fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
-           backup_type 6 rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
+    SCOPT="reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
+           train_data_type ${HEAD_TYPE} fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
+           rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
            noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA} forced_playouts ${FORCED_PLAYOUTS} \
            policy_pruning ${POLICY_PRUNING}"
     ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
@@ -498,7 +498,7 @@ selfplay_loop() {
 
         calc_global_steps
 
-        SCPID=`pidof scorpio`
+        SCPID=`pidof scorpio` || true
         if [ ! -z ${SCPID} ]; then
            $( kill -STOP ${SCPID} ) || true
         fi
