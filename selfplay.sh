@@ -11,7 +11,7 @@ CUTECHESS=~/cutechess-cli
 BAYESELO=~/BayesElo/bayeselo
 
 #server options
-DIST=0
+DIST=1
 REFRESH=20s
 
 #setup parameters for selfplay
@@ -21,7 +21,7 @@ OPT=0              # Optimizer 0=SGD 1=ADAM
 LR=0.2             # learning rate
 EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=640         # Number of steps
+NSTEPS=1920        # Number of steps
 CPUCT=125          # Cpuct constant
 POL_TEMP=110       # Policy temeprature
 RAND_TEMP=90       # Temperature for random selection of moves
@@ -34,11 +34,14 @@ SCO_WEIGHT=1       # Score head weight
 VAL_WEIGHT=1       # Value weight
 RSAVO=1            # Save weights with optimization after this many chunks
 FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
-FRAC_Z=1           # Fraction of ouctome(Z) relative to MCTS value(Q)
+FRAC_Z=0.8         # Fraction of ouctome(Z) relative to MCTS value(Q)
 FORCED_PLAYOUTS=0  # Forced playouts
 POLICY_PRUNING=0   # Policy pruning
 FPU_IS_LOSS=0      # FPU is loss,win or reduction
 FPU_RED=33         # FPU reduction level
+PLAYOUT_CAP=0      # Playout cap randomization
+FRAC_FULL_PLAY=25  # Fraction of positions where full playouts are used
+FRAC_SV_LOW=30     # Fraction of visits for the low playouts
 
 #Network parameters
 BOARDX=8
@@ -244,6 +247,14 @@ else
    V=`ls -at ${NETS_DIR}/hist/ID-*-model-${Pnet} | head -1 | xargs -n 1 basename | grep -o -E '[0-9]+' | head -1`
 fi
 
+#options for Scorpio
+SCOPT="reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 sv ${SV} \
+       playout_cap_rand ${PLAYOUT_CAP} frac_full_playouts ${FRAC_FULL_PLAY} frac_sv_low ${FRAC_SV_LOW} \
+       train_data_type ${HEAD_TYPE} fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
+       rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
+       noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA} forced_playouts ${FORCED_PLAYOUTS} \
+       policy_pruning ${POLICY_PRUNING}"
+
 #start server
 send_server() {
    echo $@ > servinp
@@ -256,8 +267,7 @@ if [ $DIST -eq 1 ]; then
    fi
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
-   send_server parameters ${WORK_ID} ${SV} ${CPUCT} ${POL_TEMP} ${NOISE_FRAC} ${HEAD_TYPE} ${RAND_TEMP} \
-         ${NOISE_ALPHA} ${NOISE_BETA} ${FORCED_PLAYOUTS} ${POLICY_PRUNING} ${FPU_IS_LOSS} ${FPU_RED}
+   send_server parameters ${WORK_ID} ${SCOPT}
    send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff \
         "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${Pnet}.uff"
    echo "Finished starting server"
@@ -280,12 +290,7 @@ rungames() {
     else
         NETW=""
     fi
-    SCOPT="reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
-           train_data_type ${HEAD_TYPE} fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
-           rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
-           noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA} forced_playouts ${FORCED_PLAYOUTS} \
-           policy_pruning ${POLICY_PRUNING}"
-    ALLOPT="${NETW} new ${SCOPT} sv ${SV} \
+    ALLOPT="${NETW} new ${SCOPT} \
 	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
     time ${MPICMD} ./${EXE} ${ALLOPT}
 }
