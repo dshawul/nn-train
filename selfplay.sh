@@ -23,11 +23,13 @@ EPOCHS=1           # Number of epochs
 NREPLAY=$((32*G))  # Number of games in the replay buffer
 NSTEPS=1920        # Number of steps
 CPUCT=125          # Cpuct constant
-POL_TEMP=110       # Policy temeprature
-RAND_TEMP=90       # Temperature for random selection of moves
+POL_TEMP=120       # Policy temeprature
 NOISE_FRAC=25      # Fraction of Dirchilet noise
 NOISE_ALPHA=30     # Alpha parameter
 NOISE_BETA=100     # Beta parameter
+TEMP_PLIES=30      # Number of plies to apply for noise
+RAND_TEMP=90       # Temperature for random selection of moves
+RAND_TEMP_END=0    # Endgame temperature for random selection of moves
 POL_GRAD=0         # Use policy gradient algo.
 POL_WEIGHT=2       # Policy weight
 SCO_WEIGHT=1       # Score head weight
@@ -62,8 +64,8 @@ if [ $DISTILL != 0 ]; then
 fi
 
 #nets directory
-WORK_ID=6
-NETS_DIR=${PWD}/nets-${WORK_ID}
+WORK_ID=11
+NETS_DIR=${HOME}/storage/scorpiozero/nets-$(printf "%02d" ${WORK_ID})
 
 #pgn/epd source directory, and starting index
 SRCPGN_DIR=files.txt
@@ -165,7 +167,7 @@ conduct_match() {
 
     cd $CUTECHESS
     rm -rf match.pgn
-    ./cutechess-cli -concurrency 1 \
+    ./cutechess-cli -concurrency 1 -resign movecount=3 score=500 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
 		arg="sv 4000 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
@@ -248,7 +250,7 @@ else
 fi
 
 #options for Scorpio
-SCOPT="reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 sv ${SV} \
+SCOPT="early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 sv ${SV} \
        playout_cap_rand ${PLAYOUT_CAP} frac_full_playouts ${FRAC_FULL_PLAY} frac_sv_low ${FRAC_SV_LOW} \
        train_data_type ${HEAD_TYPE} fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
        rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
@@ -354,7 +356,7 @@ get_file_games() {
     while true; do
         sleep ${REFRESH}
         if [ -f ./cgames.pgn ]; then
-            LN=`grep "Result" cgames.pgn | wc -l`
+            LN=`grep Result cgames.pgn | wc -l`
         else
             LN=0
         fi
