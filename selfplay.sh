@@ -15,35 +15,38 @@ DIST=1
 REFRESH=20s
 
 #setup parameters for selfplay
-SV=800             # mcts simulations
-G=24576            # train net after this number of games
-OPT=0              # Optimizer 0=SGD 1=ADAM
-LR=0.2             # learning rate
-EPOCHS=1           # Number of epochs
-NREPLAY=$((32*G))  # Number of games in the replay buffer
-NSTEPS=1920        # Number of steps
-CPUCT=125          # Cpuct constant
-POL_TEMP=120       # Policy temeprature
-NOISE_FRAC=25      # Fraction of Dirchilet noise
-NOISE_ALPHA=30     # Alpha parameter
-NOISE_BETA=100     # Beta parameter
-TEMP_PLIES=30      # Number of plies to apply for noise
-RAND_TEMP=90       # Temperature for random selection of moves
-RAND_TEMP_END=0    # Endgame temperature for random selection of moves
-POL_GRAD=0         # Use policy gradient algo.
-POL_WEIGHT=2       # Policy weight
-SCO_WEIGHT=1       # Score head weight
-VAL_WEIGHT=1       # Value weight
-RSAVO=1            # Save weights with optimization after this many chunks
-FRAC_PI=1          # Fraction of MCTS policy (PI) relative to one-hot policy(P)
-FRAC_Z=0.8         # Fraction of ouctome(Z) relative to MCTS value(Q)
-FORCED_PLAYOUTS=0  # Forced playouts
-POLICY_PRUNING=0   # Policy pruning
-FPU_IS_LOSS=0      # FPU is loss,win or reduction
-FPU_RED=33         # FPU reduction level
-PLAYOUT_CAP=0      # Playout cap randomization
-FRAC_FULL_PLAY=25  # Fraction of positions where full playouts are used
-FRAC_SV_LOW=30     # Fraction of visits for the low playouts
+SV=800                   # mcts simulations
+G=24576                  # train net after this number of games
+OPT=0                    # Optimizer 0=SGD 1=ADAM
+LR=0.2                   # learning rate
+EPOCHS=1                 # Number of epochs
+NREPLAY=$((32*G))        # Number of games in the replay buffer
+NSTEPS=1920              # Number of steps
+CPUCT=125                # Cpuct constant
+CPUCT_ROOT_FAC=100       # Mulitply Cpuct at root by this factor
+POL_TEMP=110             # Policy temeprature
+POL_TEMP_ROOT_FAC=100    # Multiply Policy temeprature at root by this factor
+NOISE_FRAC=25            # Fraction of Dirchilet noise
+NOISE_ALPHA=30           # Alpha parameter
+NOISE_BETA=100           # Beta parameter
+TEMP_PLIES=30            # Number of plies to apply for noise
+RAND_TEMP=90             # Temperature for random selection of moves
+RAND_TEMP_DELTA=0        # Decrease temperature linearly by this much
+RAND_TEMP_END=0          # Endgame temperature for random selection of moves
+POL_GRAD=0               # Use policy gradient algo.
+POL_WEIGHT=2             # Policy weight
+SCO_WEIGHT=1             # Score head weight
+VAL_WEIGHT=1             # Value weight
+RSAVO=1                  # Save weights with optimization after this many chunks
+FRAC_PI=1                # Fraction of MCTS policy (PI) relative to one-hot policy(P)
+FRAC_Z=1                 # Fraction of ouctome(Z) relative to MCTS value(Q)
+FORCED_PLAYOUTS=0        # Forced playouts
+POLICY_PRUNING=0         # Policy pruning
+FPU_IS_LOSS=0            # FPU is loss,win or reduction
+FPU_RED=33               # FPU reduction level
+PLAYOUT_CAP=0            # Playout cap randomization
+FRAC_FULL_PLAY=25        # Fraction of positions where full playouts are used
+FRAC_SV_LOW=30           # Fraction of visits for the low playouts
 
 #Network parameters
 BOARDX=8
@@ -64,7 +67,7 @@ if [ $DISTILL != 0 ]; then
 fi
 
 #nets directory
-WORK_ID=11
+WORK_ID=12
 NETS_DIR=${HOME}/storage/scorpiozero/nets-$(printf "%02d" ${WORK_ID})
 
 #pgn/epd source directory, and starting index
@@ -250,12 +253,15 @@ else
 fi
 
 #options for Scorpio
-SCOPT="early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 sv ${SV} \
+SCOPT="early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
+       train_data_type ${HEAD_TYPE} sv ${SV} \
        playout_cap_rand ${PLAYOUT_CAP} frac_full_playouts ${FRAC_FULL_PLAY} frac_sv_low ${FRAC_SV_LOW} \
-       train_data_type ${HEAD_TYPE} fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} cpuct_init ${CPUCT} \
-       rand_temp ${RAND_TEMP} policy_temp ${POL_TEMP} noise_frac ${NOISE_FRAC} \
-       noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA} forced_playouts ${FORCED_PLAYOUTS} \
-       policy_pruning ${POLICY_PRUNING}"
+       forced_playouts ${FORCED_PLAYOUTS} policy_pruning ${POLICY_PRUNING} \
+       fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} \
+       cpuct_init ${CPUCT} cpuct_init_root_factor ${CPUCT_ROOT_FAC} \
+       policy_temp ${POL_TEMP} policy_temp_root_factor ${POL_TEMP_ROOT_FAC} \
+       rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END} \
+       noise_frac ${NOISE_FRAC} noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA}"
 
 #start server
 send_server() {
