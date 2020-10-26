@@ -7,10 +7,8 @@ from tensorflow.keras.layers import (
     Dense,
     Flatten,
     Add,
-    Concatenate,
     Reshape,
     GlobalAveragePooling2D,
-    GlobalMaxPool2D,
     Multiply,
     Permute
 )
@@ -206,10 +204,12 @@ def build_net(main_input_shape,  blocks, filters, pol_channels, HEAD_TYPE):
     elif HEAD_TYPE == 1:
         score = score_head(x, filters, pol_channels)
         outputs = [value, score]
-    else:
+    elif HEAD_TYPE == 2:
         policy = policy_head(x, filters, pol_channels)
         score = score_head(x, filters, pol_channels)
         outputs = [value, policy, score]
+    else:
+        outputs = [value]
 
     #model
     model = Model(inputs=[main_input], outputs=outputs)

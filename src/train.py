@@ -3,6 +3,7 @@ import sys
 import time
 import chess
 import resnet
+import nnue
 import argparse
 import gzip
 import numpy as np
@@ -33,8 +34,11 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
+NNUE_CHANNELS = 384  # 32x12 channels used during training
+                     # CHANNELS=12 is used during data processing
 
-def fill_piece(iplanes, ix, bb, b, flip_file):
+def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
+    """ Compute piece placement and attack plane for a given piece type """
 
     if AUX_INP:
         abb = 0
@@ -43,7 +47,7 @@ def fill_piece(iplanes, ix, bb, b, flip_file):
             abb = abb | b.attacks_mask(sq)
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
-            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix + 12] = 1.0
 
@@ -51,7 +55,7 @@ def fill_piece(iplanes, ix, bb, b, flip_file):
         for sq in squares:
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
-            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
     else:
@@ -59,67 +63,99 @@ def fill_piece(iplanes, ix, bb, b, flip_file):
         for sq in squares:
             f = chess.square_file(sq)
             r = chess.square_rank(sq)
-            if b.turn == chess.BLACK: r = RANK_U -r
+            if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
 
-def fill_planes(iplanes, b):
-    pl = b.turn
-    npl = not b.turn
+def fill_planes_(iplanes, b, side, flip_rank, flip_file):
+    """ Compute piece and attack planes for all pieces"""
 
-    #flip horizontal
-    flip_file = (chess.square_file(b.king(pl)) < 4)
+    pl = side
+    npl = not side
 
     #white piece attacks
     bb = b.kings   & b.occupied_co[pl]
-    fill_piece(iplanes,0,bb,b,flip_file)
+    fill_piece(iplanes,0,bb,b,flip_rank,flip_file)
     bb = b.queens  & b.occupied_co[pl]
-    fill_piece(iplanes,1,bb,b,flip_file)
+    fill_piece(iplanes,1,bb,b,flip_rank,flip_file)
     bb = b.rooks   & b.occupied_co[pl]
-    fill_piece(iplanes,2,bb,b,flip_file)
+    fill_piece(iplanes,2,bb,b,flip_rank,flip_file)
     bb = b.bishops & b.occupied_co[pl]
-    fill_piece(iplanes,3,bb,b,flip_file)
+    fill_piece(iplanes,3,bb,b,flip_rank,flip_file)
     bb = b.knights & b.occupied_co[pl]
-    fill_piece(iplanes,4,bb,b,flip_file)
+    fill_piece(iplanes,4,bb,b,flip_rank,flip_file)
     bb = b.pawns   & b.occupied_co[pl]
-    fill_piece(iplanes,5,bb,b,flip_file)
+    fill_piece(iplanes,5,bb,b,flip_rank,flip_file)
 
     #black piece attacks
     bb = b.kings   & b.occupied_co[npl]
-    fill_piece(iplanes,6,bb,b,flip_file)
+    fill_piece(iplanes,6,bb,b,flip_rank,flip_file)
     bb = b.queens  & b.occupied_co[npl]
-    fill_piece(iplanes,7,bb,b,flip_file)
+    fill_piece(iplanes,7,bb,b,flip_rank,flip_file)
     bb = b.rooks   & b.occupied_co[npl]
-    fill_piece(iplanes,8,bb,b,flip_file)
+    fill_piece(iplanes,8,bb,b,flip_rank,flip_file)
     bb = b.bishops & b.occupied_co[npl]
-    fill_piece(iplanes,9,bb,b,flip_file)
+    fill_piece(iplanes,9,bb,b,flip_rank,flip_file)
     bb = b.knights & b.occupied_co[npl]
-    fill_piece(iplanes,10,bb,b,flip_file)
+    fill_piece(iplanes,10,bb,b,flip_rank,flip_file)
     bb = b.pawns   & b.occupied_co[npl]
-    fill_piece(iplanes,11,bb,b,flip_file)
+    fill_piece(iplanes,11,bb,b,flip_rank,flip_file)
 
-    #enpassant, casling, fifty and on-board mask
+def fill_planes(iplanes, b):
+    """ Compute input planes for ResNet training """
+
+    #fill planes
+    flip_rank = (b.turn == chess.BLACK)
+    flip_file = (chess.square_file(b.king(b.turn)) < 4)
+    fill_planes_(iplanes, b, b.turn, flip_rank, flip_file)
+
+    #enpassant, castling, fifty and on-board mask
     if b.ep_square:
         f = chess.square_file(b.ep_square)
         r = chess.square_rank(b.ep_square)
-        if b.turn == chess.BLACK: r = RANK_U -r
+        if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
         iplanes[r, f, CHANNELS - 8] = 1.0
 
-    if b.has_queenside_castling_rights(pl):
+    if b.has_queenside_castling_rights(b.turn):
         iplanes[:, :, CHANNELS - (6 if flip_file else 7)] = 1.0
-    if b.has_kingside_castling_rights(pl):
+    if b.has_kingside_castling_rights(b.turn):
         iplanes[:, :, CHANNELS - (7 if flip_file else 6)] = 1.0
-    if b.has_queenside_castling_rights(npl):
+    if b.has_queenside_castling_rights(not b.turn):
         iplanes[:, :, CHANNELS - (4 if flip_file else 5)] = 1.0
-    if b.has_kingside_castling_rights(npl):
+    if b.has_kingside_castling_rights(not b.turn):
         iplanes[:, :, CHANNELS - (5 if flip_file else 4)] = 1.0
 
     iplanes[:, :, CHANNELS - 3] = b.fullmove_number / 200.0
     iplanes[:, :, CHANNELS - 2] = b.halfmove_clock / 100.0
     iplanes[:, :, CHANNELS - 1] = 1.0
 
+def fill_planes_nnue_(iplanes, ikings, b, side):
+
+    #fill planes
+    flip_rank = (side == chess.BLACK)
+    flip_file = (chess.square_file(b.king(side)) < 4)
+    fill_planes_(iplanes, b, side, flip_rank, flip_file)
+
+    #king index
+    ksq = b.king(side)
+    f = chess.square_file(ksq)
+    r = chess.square_rank(ksq)
+    if flip_rank: r = RANK_U - r
+    if flip_file: f = FILE_U - f
+    kindex = r * BOARDX / 2 + (f - BOARDX / 2)
+    ikings[0] = kindex
+
+def fill_planes_nnue(iplanes, ikings, b):
+    """ Compute input planes for NNUE training """
+
+    fill_planes_nnue_(iplanes[:BOARDY,:,:], ikings[:1], b, b.turn)
+    fill_planes_nnue_(iplanes[BOARDY:,:,:], ikings[1:], b, not b.turn)
+
 def fill_planes_fen(iplanes, fen, player):
+
+    #flip rank
+    flip_rank = (player == 1)
 
     #board
     kf = 4
@@ -129,7 +165,7 @@ def fill_planes_fen(iplanes, fen, player):
             c = fen[cnt]
             idx = PIECE_MAP.find(c)
             if idx != -1:
-                if player == 0:
+                if not flip_rank:
                     iplanes[r,  f,  idx] = 1.0
                 else:
                     iplanes[RANK_U - r,  f,  (idx^1)] = 1.0
@@ -175,7 +211,7 @@ def fill_planes_fen(iplanes, fen, player):
 
             for idx in range(N_PIECES):
                 if holdings[idx] > 0:
-                    if player == 0:
+                    if not flip_rank:
                         iplanes[:,  :,    idx   + N_PIECES] = holdings[idx] / 50.0
                     else:
                         iplanes[:,  :,  (idx^1) + N_PIECES] = holdings[idx] / 50.0
@@ -186,7 +222,7 @@ def fill_planes_fen(iplanes, fen, player):
     if epstr[0] != '-':
         f = epstr[0] - 'a'
         r = epstr[1] - '1'
-        if player == 1: r = RANK_U -r
+        if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
         iplanes[r, f, CHANNELS - 8] = 1.0
 
@@ -204,34 +240,42 @@ def fill_planes_fen(iplanes, fen, player):
     iplanes[:, :, CHANNELS - 2] = float(words[3]) / 100.0
     iplanes[:, :, CHANNELS - 1] = 1.0
 
-
 def fill_examples(examples):
-    if AUX_INP:
-        bb = chess.Board()
 
+    #arrays
     N = len(examples)
-    iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+    if HEAD_TYPE == 3:
+        iplanes = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+    else:
+        iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
-    ovalue = np.zeros(shape=(N,3),dtype=np.float32)
     if HEAD_TYPE == 0:
-        opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ovalue = np.zeros(shape=(N,3),dtype=np.float32)
+        opolicy = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
         ret = [iplanes, oresult, ovalue, opolicy]
     elif HEAD_TYPE == 1:
-        oscore = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        ovalue = np.zeros(shape=(N,3),dtype=np.float32)
+        oscore = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
         ret = [iplanes, oresult, ovalue, oscore]
-    else:
-        opolicy = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
-        oscore = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+    elif HEAD_TYPE == 2:
+        ovalue = np.zeros(shape=(N,3),dtype=np.float32)
+        opolicy = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+        oscore = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
         ret = [iplanes, oresult, ovalue, opolicy, oscore]
+    else:
+        ovalue = np.zeros(shape=(N,),dtype=np.float32)
+        ikings = np.zeros(shape=(N,2),dtype=np.int)
+        ret = [iplanes, oresult, ovalue, ikings]
 
+    #parse each example
     for id,line in enumerate(examples):
 
         words = line.strip().split()
 
-        epd = ''
-
+        #fen string
+        fen = ''
         for i in range(0, 6):
-            epd = epd + words[i] + ' '
+            fen = fen + words[i] + ' '
 
         #player
         if words[1] == 'b':
@@ -239,7 +283,7 @@ def fill_examples(examples):
         else:
             player = 0
 
-        # parse result
+        #result
         svalue = words[6]
         if svalue == '1-0':
             result = 0
@@ -251,16 +295,7 @@ def fill_examples(examples):
         # value
         value = float(words[7])
 
-        # nmoves
-        nmoves = int(words[8])
-
-        #set board
-        if AUX_INP:
-            bb.set_fen(epd)
-
-        offset = 9
-
-        #flip board
+        #flip value/result
         if player == 1:
             result = 2 - result
             value = 1 - value
@@ -268,53 +303,71 @@ def fill_examples(examples):
         #result
         oresult[id] = result
 
-        #value
-        if FRAC_Z == 1:
-            ovalue[id,:] = 0.0
-            ovalue[id,result] = 1.0
-        else:
-            ovalue[id,1] = 0.7 * min(value, 1 - value)
-            ovalue[id,0] = value - ovalue[id,1] / 2.0
-            ovalue[id,2] = 1 - ovalue[id,0] - ovalue[id,1]
-
-            if FRAC_Z > 0:
-                ovalue[id,:] *= (1 - FRAC_Z)
-                ovalue[id,result] += FRAC_Z
-
-        #policy
-        V = (1.0 - result / 2.0)
-        V=max(V,1e-5)
-
-        if HEAD_TYPE == 0:
-            for i in range(offset, offset+nmoves*2, 2):
-                opolicy[id, int(words[i])] = float(words[i+1])
-            offset += nmoves*2
-        elif HEAD_TYPE == 1:
-            for i in range(offset, offset+nmoves*2, 2):
-                oscore[id, int(words[i])] = float(words[i+1])
-            offset += nmoves*2
-        else:
-            for i in range(offset, offset+nmoves*3, 3):
-                opolicy[id, int(words[i])] = float(words[i+1])
-                oscore[id, int(words[i])] = float(words[i+2])
-            offset += nmoves*3
-
-        if (FRAC_PI < 1) and (offset < len(words)):
-            bestm = int(words[offset])
-            opolicy[id, :] *= FRAC_PI
-            if HEAD_TYPE == 0:
-                opolicy[id, bestm] += (1 - FRAC_PI)
-            elif HEAD_TYPE == 1:
-                oscore[id, bestm] += (1 - FRAC_PI) * V
+        #value/policy/score heads
+        if HEAD_TYPE == 3:
+            #value
+            if FRAC_Z == 0:
+                ovalue[id] = value
+            elif FRAC_Z == 1:
+                ovalue[id] = 1 - result / 2.0
             else:
-                opolicy[id, bestm] += (1 - FRAC_PI)
-                oscore[id, bestm] += (1 - FRAC_PI) * V
+                ovalue[id] = value * (1 - FRAC_Z) + (1 - result / 2.0) * FRAC_Z
+        else:
+            # nmoves
+            nmoves = int(words[8])
+            offset = 9
+
+            #value
+            if FRAC_Z == 1:
+                ovalue[id,:] = 0.0
+                ovalue[id,result] = 1.0
+            else:
+                ovalue[id,1] = 0.7 * min(value, 1 - value)
+                ovalue[id,0] = value - ovalue[id,1] / 2.0
+                ovalue[id,2] = 1 - ovalue[id,0] - ovalue[id,1]
+
+                if FRAC_Z > 0:
+                    ovalue[id,:] *= (1 - FRAC_Z)
+                    ovalue[id,result] += FRAC_Z
+
+            #policy
+            V = (1.0 - result / 2.0)
+            V=max(V,1e-5)
+
+            if HEAD_TYPE == 0:
+                for i in range(offset, offset+nmoves*2, 2):
+                    opolicy[id, int(words[i])] = float(words[i+1])
+                offset += nmoves*2
+            elif HEAD_TYPE == 1:
+                for i in range(offset, offset+nmoves*2, 2):
+                    oscore[id, int(words[i])] = float(words[i+1])
+                offset += nmoves*2
+            else:
+                for i in range(offset, offset+nmoves*3, 3):
+                    opolicy[id, int(words[i])] = float(words[i+1])
+                    oscore[id, int(words[i])] = float(words[i+2])
+                offset += nmoves*3
+
+            if (FRAC_PI < 1) and (offset < len(words)):
+                bestm = int(words[offset])
+                opolicy[id, :] *= FRAC_PI
+                if HEAD_TYPE == 0:
+                    opolicy[id, bestm] += (1 - FRAC_PI)
+                elif HEAD_TYPE == 1:
+                    oscore[id, bestm] += (1 - FRAC_PI) * V
+                else:
+                    opolicy[id, bestm] += (1 - FRAC_PI)
+                    oscore[id, bestm] += (1 - FRAC_PI) * V
 
         #input planes
-        if AUX_INP:
+        if HEAD_TYPE == 3:
+            bb = chess.Board(fen)
+            fill_planes_nnue(iplanes[id,:,:,:],ikings[id,:],bb)
+        elif AUX_INP:
+            bb = chess.Board(fen)
             fill_planes(iplanes[id,:,:,:],bb)
         else:
-            fill_planes_fen(iplanes[id,:,:,:],epd,words,player)
+            fill_planes_fen(iplanes[id,:,:,:],fen,words,player)
 
     return ret
 
@@ -330,6 +383,9 @@ def build_model(cid):
         return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 4:
         return resnet.build_net(INPUT_SHAPE, 40, 256, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 5:
+        INPUT_SHAPE=(BOARDY, BOARDX, NNUE_CHANNELS)
+        return nnue.build_net(INPUT_SHAPE)
     else:
         print("Unsupported network id (Use 0 to 4).")
         sys.exit()
@@ -353,6 +409,13 @@ def sloss(y_true, y_pred):
     sz = tf.cast(tf.size(is_legal), tf.float32)
     return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
 
+def my_load_model(fname,compile=True):
+    return tf.keras.models.load_model(fname, compile=compile,
+            custom_objects={'loss': loss,
+                            'paccuracy':paccuracy,
+                            'sloss':sloss,
+                            'clipped_relu':nnue.clipped_relu})
+
 class NNet():
     def __init__(self,args):
         self.mirrored_strategy = tf.distribute.MirroredStrategy()
@@ -367,11 +430,9 @@ class NNet():
     def load_model(self,fname,compile,args):
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                return tf.keras.models.load_model(fname, compile=compile,
-                    custom_objects={'loss': loss, 'paccuracy':paccuracy, 'sloss':sloss})
+                return my_load_model(fname,compile)
         else:
-            return tf.keras.models.load_model(fname, compile=compile,
-                custom_objects={'loss': loss, 'paccuracy':paccuracy, 'sloss':sloss})
+            return my_load_model(fname,compile)
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
@@ -382,6 +443,7 @@ class NNet():
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
+        #losses and metrics
         if HEAD_TYPE == 0:
             losses = {"value":'categorical_crossentropy', "policya":loss}
             metrics = {"value":'accuracy', "policya":paccuracy}
@@ -392,10 +454,14 @@ class NNet():
             metrics = {"value":'accuracy'}
             loss_weights = [args.val_w, args.score_w]
 
-        else:
+        elif HEAD_TYPE == 2:
             losses  = {"value":'categorical_crossentropy', "policya":loss, "scorea":sloss}
             metrics = {"value":'accuracy', "policya":paccuracy}
             loss_weights = [args.val_w, args.pol_w, args.score_w]
+        else:
+            losses  = {"value":'mean_squared_error'}
+            metrics = {}
+            loss_weights = [args.val_w]
 
         # compile model
         if args.gpus > 1:
@@ -417,36 +483,66 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
         res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
-        #accumulate
-        ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+        #arrays
+        if HEAD_TYPE == 3:
+            ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+        else:
+            ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
-        oval = np.zeros(shape=(N,3),dtype=np.float32)
         if HEAD_TYPE == 0:
-            opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            oval = np.zeros(shape=(N,3),dtype=np.float32)
+            opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+            x = [ipln]
             y = [oval, opol]
         elif HEAD_TYPE == 1:
-            osco = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+            oval = np.zeros(shape=(N,3),dtype=np.float32)
+            osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+            x = [ipln]
             y = [oval, osco]
-        else:
-            opol = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
-            osco = np.zeros(shape=(N,POLICY_CHANNELS*BOARDX*BOARDY),dtype=np.float32)
+        elif HEAD_TYPE == 2:
+            oval = np.zeros(shape=(N,3),dtype=np.float32)
+            opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+            osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+            x = [ipln]
             y = [oval, opol, osco]
+        else:
+            oval = np.zeros(shape=(N,),dtype=np.float32)
+            ikin = np.zeros(shape=(N,2),dtype=np.int)
+            x1 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.float32)
+            x2 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.float32)
+            x = [x1, x2]
+            y = [oval]
 
+        #merge results from different cores
         for i in range(args.cores):
             ipln[slices[i],:,:,:] = res[i][0]
             ores[slices[i]] = res[i][1]
-            oval[slices[i],:] = res[i][2]
             if HEAD_TYPE == 0:
+                oval[slices[i],:] = res[i][2]
                 opol[slices[i],:] = res[i][3]
             elif HEAD_TYPE == 1:
+                oval[slices[i],:] = res[i][2]
                 osco[slices[i],:] = res[i][3]
-            else:
+            elif HEAD_TYPE == 2:
+                oval[slices[i],:] = res[i][2]
                 opol[slices[i],:] = res[i][3]
                 osco[slices[i],:] = res[i][4]
+            else:
+                oval[slices[i]] = res[i][2]
+                ikin[slices[i],:] = res[i][3]
+
+        #construct sparse matrix
+        if HEAD_TYPE == 3:
+            for id in range(N):
+                k1 = ikin[id][0] * CHANNELS
+                k2 = ikin[id][1] * CHANNELS
+                x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
+                x2[id,:,:,k2:k2+CHANNELS] = ipln[id,BOARDY:,:,:]
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
 
+        #sampe weight
         start_t = end_t
         vweights = None
         pweights = None
@@ -454,6 +550,7 @@ class NNet():
             vweights = np.ones(ores.size)
             pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0) #  Z-Q
 
+        #train each model
         for i in range(len(self.model)):
             print("Fitting model",i)
 
@@ -462,7 +559,7 @@ class NNet():
             epochs = initial_epoch + args.epochs
 
             if args.pol_grad > 0:
-                self.model[i].fit(x = [ipln], y = y,
+                self.model[i].fit(x = x, y = y,
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
                       validation_split=args.vald_split,
@@ -470,7 +567,7 @@ class NNet():
                       epochs=epochs,
                       callbacks=[tensorboard_callback])
             else:
-                self.model[i].fit(x = [ipln], y = y,
+                self.model[i].fit(x = x, y = y,
                       batch_size=BATCH_SIZE,
                       validation_split=args.vald_split,
                       initial_epoch=initial_epoch,
@@ -605,7 +702,7 @@ def main(argv):
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[0,1,2], \
-                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=40x256.')
+                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=40x256,5=NNUE.')
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
@@ -625,7 +722,7 @@ def main(argv):
     parser.add_argument('--piece-map',dest='pcmap', required=False, default=PIECE_MAP,help='Map pieces to planes')
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
     parser.add_argument('--head-type',dest='head_type', required=False, type=int, default=HEAD_TYPE, \
-        help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three.')
+        help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three, 3=value only.')
 
     args = parser.parse_args()
 
@@ -658,6 +755,7 @@ def main(argv):
     chunk = args.id
 
     #save inference graphs
+    exists = os.path.exists(args.dir)
     myNet.save_infer_graph(args)
 
     #initialize mixed precision training
@@ -677,6 +775,8 @@ def main(argv):
     if args.rand:
         myNet.save_checkpoint(chunk, args)
     else:
+        if not exists:
+            myNet.save_checkpoint(chunk, args)
         start = chunk * EPD_CHUNK_SIZE + 1
         train_epd(myNet, args, args.epd, start)
 

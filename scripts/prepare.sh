@@ -1,7 +1,11 @@
 #!/bin/bash
 NDIR=$1
 SDIR=$( dirname ${BASH_SOURCE[0]} )
-OUT="-O value/BiasAdd -O policy/Reshape"
+if [ ! -z "$3" ] && [ $3 -eq 5 ]; then
+   OUT="-O value/Sigmoid"
+else
+   OUT="-O value/BiasAdd -O policy/Reshape"
+fi
 if [ -z "$3" ]; then
    RN=$(seq 0 3)
 else
