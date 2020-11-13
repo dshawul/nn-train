@@ -15,7 +15,8 @@ DIST=1
 REFRESH=20s
 
 #setup parameters for selfplay
-SV=800                   # mcts simulations
+SV=800                   # simulations limit for MCTS
+SD=4                     # depth limit for AB search
 G=24576                  # train net after this number of games
 OPT=0                    # Optimizer 0=SGD 1=ADAM
 LR=0.2                   # learning rate
@@ -47,32 +48,36 @@ FPU_RED=33               # FPU reduction level
 PLAYOUT_CAP=0            # Playout cap randomization
 FRAC_FULL_PLAY=25        # Fraction of positions where full playouts are used
 FRAC_SV_LOW=30           # Fraction of visits for the low playouts
+RESIGN=600               # Resign value
+MONTECARLO=1             # Use montecarlo search for selfplay
 
 #Network parameters
-BOARDX=8
-BOARDY=8
-CHANNELS=32
-POL_CHANNELS=16
-NOAUXINP=
-TRNFLGS=
-NBATCH=640
-BATCH_SIZE=512
-DISTILL=0
-PIECE_MAP="KQRBNPkqrbnp"
-HEAD_TYPE=0
+HEAD_TYPE=0              # output head type
+BOARDX=8                 # Board dimension in X
+BOARDY=8                 # Board dimension in Y
+CHANNELS=32              # Number of input channels
+POL_CHANNELS=16          # Number of policy channels
+NOAUXINP=                # No auxillary inputs
+TRNFLGS=                 # Additional training flags
+NBATCH=640               # Number of mini-batches to process at once
+BATCH_SIZE=512           # Mini-batch size
+DISTILL=0                # Distill from another net
+PIECE_MAP="KQRBNPkqrbnp" # Piece characters
 
+#Adjust Z and PI ratio
 if [ $DISTILL != 0 ]; then
   FRAC_Z=0
   FRAC_PI=1
 fi
 
 #nets directory
-WORK_ID=12
+WORK_ID=14
 NETS_DIR=${HOME}/storage/scorpiozero/nets-$(printf "%02d" ${WORK_ID})
 
 #pgn/epd source directory, and starting index
 SRCPGN_DIR=files.txt
 SRCEPD_DIR=${HOME}/storage/scorpiozero/nets-7/train
+SRCTRN_DIR=${HOME}/storage/train-data/remote-5
 CI=0
 
 #mpi
@@ -160,23 +165,35 @@ conduct_match() {
        ./scripts/prepare.sh ${NETS_DIR}/hist $2 $1 > /dev/null 2>&1
     fi
 
-    if [ $GPUS -gt 0 ]; then
+    if [ $1 = 5 ]; then
+       ND1=${ND1}.bin
+       ND2=${ND2}.bin
+    else
        ND1=${ND1}.uff
        ND2=${ND2}.uff
-    else
-       ND1=${ND1}.pb
-       ND2=${ND2}.pb
     fi
 
     cd $CUTECHESS
     rm -rf match.pgn
-    ./cutechess-cli -concurrency 1 -resign movecount=3 score=500 \
+
+    if [ $1 = 5 ]; then
+       MATCH_OPTS="montecarlo 0 mt 1 use_nn 0 use_nnue 1 nnue_type 1 nnue_path"
+       CONCUR=10
+       TC=20+0.5
+    else
+       MATCH_OPTS="montecarlo 1 sv 4000 alphabeta_man_c 0 float_type HALF use_nn 1 use_nnue 0 nn_type 0 nn_path"
+       CONCUR=1
+       TC=40/80000
+    fi
+
+    ./cutechess-cli -concurrency $CONCUR -resign movecount=3 score=500 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 4000 nn_type 0 nn_path ${ND1} alphabeta_man_c 0 float_type HALF" name=scorpio-$3 \
+		arg="${MATCH_OPTS} ${ND1}" name=scorpio-$3 \
         -engine cmd=${SC}/scorpio.sh dir=${SC} proto=xboard \
-		arg="sv 4000 nn_type 0 nn_path ${ND2} alphabeta_man_c 0 float_type HALF" name=scorpio-$2 \
-        -each tc=40/30000 -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
+		arg="${MATCH_OPTS} ${ND2}" name=scorpio-$2 \
+        -each tc=$TC -rounds $4 -pgnout match.pgn -openings file=2moves.pgn \
 	        format=pgn order=random -repeat
+
     cd - > /dev/null 2>&1
 
     cat ${CUTECHESS}/match.pgn >> ${NETS_DIR}/matches/match$2-$3.pgn
@@ -184,7 +201,7 @@ conduct_match() {
 }
 
 if [ "$1" == "-m" ] || [ "$1" == "--match" ]; then
-    conduct_match $2 $3 $4 100
+    conduct_match $2 $3 $4 200
     calculate_elo
     exit 0
 fi
@@ -238,23 +255,29 @@ if ! [ -e ${NETS_DIR} ]; then
 fi
 
 #which net format to use
-Pnet=${net[0]}
-if [ $GPUS -gt 0 ]; then
-    NDIR=${NETS_DIR}/ID-0-model-${Pnet}.uff
+NID=${net[0]}
+if [ $NID -eq 5 ]; then
+    NEXT=bin
 else
-    NDIR=${NETS_DIR}/ID-0-model-${Pnet}.pb
+    NEXT=uff
 fi
+NDIR=${NETS_DIR}/ID-0-model-${NID}.${NEXT}
 
 #start network id
 if [ $DIST -eq 3 ]; then
    V=$CI
 else
-   V=`ls -at ${NETS_DIR}/hist/ID-*-model-${Pnet} | head -1 | xargs -n 1 basename | grep -o -E '[0-9]+' | head -1`
+   V=`ls -at ${NETS_DIR}/hist/ID-*-model-${NID} | head -1 | xargs -n 1 basename | grep -o -E '[0-9]+' | head -1`
 fi
 
 #options for Scorpio
-SCOPT="early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
-       train_data_type ${HEAD_TYPE} sv ${SV} \
+if [ $MONTECARLO = 0 ]; then
+SCOPT="montecarlo 0 filter_quiet 1 \
+       sp_resign_value ${RESIGN} train_data_type ${HEAD_TYPE} sd ${SD} \
+       rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END}"
+else
+SCOPT="montecarlo 1 early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
+       sp_resign_value ${RESIGN} train_data_type ${HEAD_TYPE} sv ${SV} \
        playout_cap_rand ${PLAYOUT_CAP} frac_full_playouts ${FRAC_FULL_PLAY} frac_sv_low ${FRAC_SV_LOW} \
        forced_playouts ${FORCED_PLAYOUTS} policy_pruning ${POLICY_PRUNING} \
        fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} \
@@ -262,6 +285,19 @@ SCOPT="early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_valu
        policy_temp ${POL_TEMP} policy_temp_root_factor ${POL_TEMP_ROOT_FAC} \
        rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END} \
        noise_frac ${NOISE_FRAC} noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA}"
+fi
+if [ $DISTILL = 0 ]; then
+   if [ $NID -eq 5 ]; then
+       NOPTS="use_nn 0 use_nnue 1 nnue_type 1 nnue_path"
+   else
+       NOPTS="use_nn 1 use_nnue 0 nn_type 0 nn_path"
+   fi
+   if [ $DIST -eq 1 ]; then
+       SCOPT="${NOPTS} ../../../net.uff new ${SCOPT}"
+   else
+       SCOPT="${NOPTS} ${NDIR} new ${SCOPT}"
+   fi
+fi
 
 #start server
 send_server() {
@@ -276,8 +312,8 @@ if [ $DIST -eq 1 ]; then
    tail -f servinp | nn-dist/server.sh &
    sleep 5s
    send_server parameters ${WORK_ID} ${SCOPT}
-   send_server network-uff ${NETS_DIR}/ID-0-model-${Pnet}.uff \
-        "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${Pnet}.uff"
+   send_server network-uff ${NDIR} \
+        "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${NID}.${NEXT}"
    echo "Finished starting server"
 else
    if [ ! -f ${SC}/${EXE} ]; then
@@ -293,18 +329,14 @@ rungames() {
     else
         GW=$(($1/(RANKS*GPUS)))
     fi
-    if [ $DISTILL = 0 ]; then
-        NETW="nn_type 0 nn_path ${NDIR}"
-    else
-        NETW=""
-    fi
-    ALLOPT="${NETW} new ${SCOPT} \
-	   pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
+    ALLOPT="${SCOPT} pvstyle 1 selfplayp ${GW} games.pgn train.epd quit"
     time ${MPICMD} ./${EXE} ${ALLOPT}
 }
 
 #train network
 train() {
+    SAVE=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64:${HOME}/cudnn-765/lib64
     python src/train.py ${TRNFLGS} \
        --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
        --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} \
@@ -312,6 +344,7 @@ train() {
        --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
        --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} --head-type ${HEAD_TYPE} \
        ${NOAUXINP}
+    export LD_LIBRARY_PATH=${SAVE}
 }
 
 #move
@@ -432,10 +465,21 @@ get_src_pgn() {
     mv ${SC}/ctrain.epd .
 }
 
-#get training positions from source
+#get training positions from source, followed by sampling
 get_src_epd() {
+    echo "CI" $CI
     cp ${SRCEPD_DIR}/train$CI.epd.gz ${NETS_DIR}/data$CI.epd.gz
     gzip -fd ${NETS_DIR}/data$CI.epd.gz
+    CI=$((CI+1))
+}
+
+#get training positions from source, no sampling
+get_trn_epd() {
+    echo "CI" $CI
+    rm -rf ${NETS_DIR}/temp.epd
+    cp ${SRCTRN_DIR}/temp$CI.epd.gz ${NETS_DIR}/temp$CI.epd.gz
+    gzip -fd ${NETS_DIR}/temp$CI.epd.gz
+    mv ${NETS_DIR}/temp$CI.epd ${NETS_DIR}/temp.epd
     CI=$((CI+1))
 }
 
@@ -480,7 +524,10 @@ replay_buffer() {
 prepare() {
     
     #run games
-    if [ $DIST -eq 3 ]; then
+    if [ $DIST -eq 4 ]; then
+        get_trn_epd
+        return
+    elif [ $DIST -eq 3 ]; then
         get_src_epd
     elif [ $DIST -eq 2 ]; then
         get_src_pgn
