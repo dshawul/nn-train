@@ -382,7 +382,7 @@ def build_model(cid):
     elif cid == 3:
         return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 40, 256, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 30, 384, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 5:
         INPUT_SHAPE=(BOARDY, BOARDX, NNUE_CHANNELS)
         return nnue.build_net(INPUT_SHAPE)
@@ -702,7 +702,7 @@ def main(argv):
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[0,1,2], \
-                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=40x256,5=NNUE.')
+                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=30x384,5=NNUE.')
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')

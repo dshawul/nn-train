@@ -14,14 +14,24 @@ fi
 for i in $RN; do
    $SDIR/convert-to-pb.sh ${NDIR}/ID-$2-model-$i ${NDIR}/infer-$i
    convert-to-uff $NDIR/ID-$2-model-$i.pb ${OUT}
+
+   if [ $i -eq 0 ]; then
+      cp ${NDIR}/ID-$2-model-0.pb ${NDIR}/net-2x32.pb
+      cp ${NDIR}/ID-$2-model-0.uff ${NDIR}/net-2x32.uff
+   elif [ $i -eq 1 ]; then
+      cp ${NDIR}/ID-$2-model-1.pb ${NDIR}/net-6x64.pb
+      cp ${NDIR}/ID-$2-model-1.uff ${NDIR}/net-6x64.uff
+   elif [ $i -eq 2 ]; then
+      cp ${NDIR}/ID-$2-model-2.pb ${NDIR}/net-12x128.pb
+      cp ${NDIR}/ID-$2-model-2.uff ${NDIR}/net-12x128.uff
+   elif [ $i -eq 3 ]; then
+      cp ${NDIR}/ID-$2-model-3.pb ${NDIR}/net-20x256.pb
+      cp ${NDIR}/ID-$2-model-3.uff ${NDIR}/net-20x256.uff
+   elif [ $i -eq 4 ]; then
+      cp ${NDIR}/ID-$2-model-4.pb ${NDIR}/net-30x384.pb
+      cp ${NDIR}/ID-$2-model-4.uff ${NDIR}/net-30x384.uff
+   elif [ $i -eq 5 ]; then
+      cp ${NDIR}/ID-$2-model-5.pb ${NDIR}/net-nnue.pb
+      cp ${NDIR}/ID-$2-model-5.uff ${NDIR}/net-nnue.uff
+   fi
 done
-if [ -z "$3" ]; then
-  cp ${NDIR}/ID-$2-model-0.pb ${NDIR}/net-2x32.pb
-  cp ${NDIR}/ID-$2-model-0.uff ${NDIR}/net-2x32.uff
-  cp ${NDIR}/ID-$2-model-1.pb ${NDIR}/net-6x64.pb
-  cp ${NDIR}/ID-$2-model-1.uff ${NDIR}/net-6x64.uff
-  cp ${NDIR}/ID-$2-model-2.pb ${NDIR}/net-12x128.pb
-  cp ${NDIR}/ID-$2-model-2.uff ${NDIR}/net-12x128.uff
-  cp ${NDIR}/ID-$2-model-3.pb ${NDIR}/net-20x256.pb
-  cp ${NDIR}/ID-$2-model-3.uff ${NDIR}/net-20x256.uff
-fi
