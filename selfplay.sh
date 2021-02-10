@@ -274,7 +274,7 @@ fi
 if [ $MONTECARLO = 0 ]; then
 SCOPT="montecarlo 0 filter_quiet 1 \
        sp_resign_value ${RESIGN} train_data_type ${HEAD_TYPE} sd ${SD} \
-       rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END}"
+       temp_plies ${TEMP_PLIES} rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END}"
 else
 SCOPT="montecarlo 1 early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 min_policy_value 0 \
        sp_resign_value ${RESIGN} train_data_type ${HEAD_TYPE} sv ${SV} \
@@ -283,7 +283,7 @@ SCOPT="montecarlo 1 early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 mi
        fpu_is_loss ${FPU_IS_LOSS} fpu_red ${FPU_RED} \
        cpuct_init ${CPUCT} cpuct_init_root_factor ${CPUCT_ROOT_FAC} \
        policy_temp ${POL_TEMP} policy_temp_root_factor ${POL_TEMP_ROOT_FAC} \
-       rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END} \
+       temp_plies ${TEMP_PLIES} rand_temp ${RAND_TEMP} rand_temp_delta ${RAND_TEMP_DELTA} rand_temp_end ${RAND_TEMP_END} \
        noise_frac ${NOISE_FRAC} noise_alpha ${NOISE_ALPHA} noise_beta ${NOISE_BETA}"
 fi
 if [ $DISTILL = 0 ]; then

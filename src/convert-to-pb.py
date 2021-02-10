@@ -65,6 +65,7 @@ def save_weights(m,name):
     for layer in m.layers:
         w = layer.get_weights()
         if(len(w) > 0):
+            print(layer.__class__.__name__)
             for wi in w:
                 print(wi.shape)
                 wf = wi.flatten()

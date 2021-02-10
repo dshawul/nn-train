@@ -34,8 +34,65 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
-NNUE_CHANNELS = 384  # 32x12 channels used during training
-                     # CHANNELS=12 is used during data processing
+
+#NNUE
+NNUE_KIDX = 3
+NNUE_KINDICES = 16
+NNUE_CHANNELS = NNUE_KINDICES*12  # NNUE_CHANNELS used during training
+                                  # CHANNELS=12 is used during data processing
+
+NNUE_KINDEX_TAB = [
+   [
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0,
+    0,  0,  0,  0
+   ],
+   [
+    0,  0,  1,  1,
+    2,  2,  2,  2,
+    3,  3,  3,  3,
+    3,  3,  3,  3,
+    3,  3,  3,  3,
+    3,  3,  3,  3,
+    3,  3,  3,  3,
+    3,  3,  3,  3
+   ],
+   [
+    0,  1,  2,  3,
+    4,  4,  5,  5,
+    6,  6,  6,  6,
+    7,  7,  7,  7,
+    7,  7,  7,  7,
+    7,  7,  7,  7,
+    7,  7,  7,  7,
+    7,  7,  7,  7
+   ],
+   [
+    0,  1,  2,  3,
+    4,  5,  6,  7,
+    8,  8,  9,  9,
+   10, 10, 11, 11,
+   12, 12, 13, 13,
+   12, 12, 13, 13,
+   14, 14, 15, 15,
+   14, 14, 15, 15
+   ],
+   [
+    0,  1,  2,  3,
+    4,  5,  6,  7,
+    8,  9, 10, 11,
+   12, 13, 14, 15,
+   16, 17, 18, 19,
+   20, 21, 22, 23,
+   24, 25, 26, 27,
+   28, 29, 30, 31
+   ]
+]
 
 def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
     """ Compute piece placement and attack plane for a given piece type """
@@ -144,7 +201,7 @@ def fill_planes_nnue_(iplanes, ikings, b, side):
     if flip_rank: r = RANK_U - r
     if flip_file: f = FILE_U - f
     kindex = r * BOARDX / 2 + (f - BOARDX / 2)
-    ikings[0] = kindex
+    ikings[0] = NNUE_KINDEX_TAB[NNUE_KIDX][kindex]
 
 def fill_planes_nnue(iplanes, ikings, b):
     """ Compute input planes for NNUE training """
@@ -534,10 +591,20 @@ class NNet():
         #construct sparse matrix
         if HEAD_TYPE == 3:
             for id in range(N):
-                k1 = ikin[id][0] * CHANNELS
-                k2 = ikin[id][1] * CHANNELS
-                x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
-                x2[id,:,:,k2:k2+CHANNELS] = ipln[id,BOARDY:,:,:]
+                if NNUE_KINDICES == 1:
+                    x1[id,:,:,0:CHANNELS] = ipln[id,:BOARDY,:,:]
+                    x2[id,:,:,0:CHANNELS] = ipln[id,BOARDY:,:,:]
+                else:
+                    k1 = ikin[id][0] * CHANNELS
+                    k2 = ikin[id][1] * CHANNELS
+                    x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
+                    x2[id,:,:,k2:k2+CHANNELS] = ipln[id,BOARDY:,:,:]
+                    if (NNUE_KINDICES % 2) != 0:
+                        k1 = (NNUE_KINDICES - 1) * CHANNELS
+                        x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
+                        x2[id,:,:,k1:k1+CHANNELS] = ipln[id,BOARDY:,:,:]
+
+
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
