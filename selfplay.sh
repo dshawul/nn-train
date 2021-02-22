@@ -177,7 +177,7 @@ conduct_match() {
     rm -rf match.pgn
 
     if [ $1 = 5 ]; then
-       MATCH_OPTS="montecarlo 0 mt 1 use_nn 0 use_nnue 1 nnue_type 1 nnue_path"
+       MATCH_OPTS="montecarlo 0 mt 1 use_nn 0 use_nnue 1 nnue_type 1 nnue_scale 128 nnue_path"
        CONCUR=10
        TC=20+0.5
     else
@@ -288,7 +288,7 @@ SCOPT="montecarlo 1 early_stop 0 reuse_tree 0 backup_type 6 alphabeta_man_c 0 mi
 fi
 if [ $DISTILL = 0 ]; then
    if [ $NID -eq 5 ]; then
-       NOPTS="use_nn 0 use_nnue 1 nnue_type 1 nnue_path"
+       NOPTS="use_nn 0 use_nnue 1 nnue_type 1 nnue_scale 128 nnue_path"
    else
        NOPTS="use_nn 1 use_nnue 0 nn_type 0 nn_path"
    fi
@@ -401,7 +401,7 @@ get_file_games() {
         fi
         if [ $PLN -ne $LN ]; then
             PP=`cat ctrain.epd | wc -l`
-            echo Accumulated: games = $LN of $G, and positions = $PP of $((NSTEPS*BATCH_SIZE))
+            echo Accumulated: games = $LN of $G, and positions = $PP of $((NSTEPS*BATCH_SIZE)), sampling ratio $(((LN*NSTEPS*BATCH_SIZE*100)/(PP*G)))%
             PLN=$LN
         fi
         if [ $LN -ge $G ]; then
@@ -520,6 +520,22 @@ replay_buffer() {
     fi
 }
 
+#stop scorpio
+SCPID=
+
+stop_scorpio() {
+   SCPID=`pidof scorpio` || true
+   if [ ! -z ${SCPID} ]; then
+       $( kill -STOP ${SCPID} ) || true
+   fi
+}
+
+resume_scorpio() {
+    if [ ! -z ${SCPID} ]; then
+       $( kill -CONT ${SCPID} ) || true
+    fi
+}
+
 #prepare training data
 prepare() {
     
@@ -538,12 +554,16 @@ prepare() {
         get_selfplay_games
     fi
 
+    stop_scorpio
+
     #backup data
     mv ctrain.epd ${NETS_DIR}/data$V.epd
     if [ $DIST -ne 3 ] && [ $DISTILL -eq 0 ]; then
        echo "Backing up training data"
        time backup_data
     fi
+
+    stop_scorpio
 
     #replay
     echo "Sampling from replay buffer"
@@ -558,10 +578,7 @@ selfplay_loop() {
 
         calc_global_steps
 
-        SCPID=`pidof scorpio` || true
-        if [ ! -z ${SCPID} ]; then
-           $( kill -STOP ${SCPID} ) || true
-        fi
+        stop_scorpio
 
         echo 'Training new net from net ID = ' $V
         time train
@@ -569,9 +586,7 @@ selfplay_loop() {
         echo 'Converting nets to UFF'
         time fornets conv
 
-        if [ ! -z ${SCPID} ]; then
-           $( kill -CONT ${SCPID} ) || true
-        fi
+        resume_scorpio
 
         V=$((V+1))
 
