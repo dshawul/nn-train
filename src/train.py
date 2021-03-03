@@ -36,8 +36,8 @@ FRAC_Z  = 1
 HEAD_TYPE = 0
 
 #NNUE
-NNUE_KIDX = 3
-NNUE_KINDICES = 16
+NNUE_KIDX = 4
+NNUE_KINDICES = (1 << NNUE_KIDX) + 1
 NNUE_CHANNELS = NNUE_KINDICES*12  # NNUE_CHANNELS used during training
                                   # CHANNELS=12 is used during data processing
 
@@ -51,6 +51,16 @@ NNUE_KINDEX_TAB = [
     0,  0,  0,  0,
     0,  0,  0,  0,
     0,  0,  0,  0
+   ],
+   [
+    0,  0,  0,  0,
+    1,  1,  1,  1,
+    1,  1,  1,  1,
+    1,  1,  1,  1,
+    1,  1,  1,  1,
+    1,  1,  1,  1,
+    1,  1,  1,  1,
+    1,  1,  1,  1
    ],
    [
     0,  0,  1,  1,
@@ -603,8 +613,6 @@ class NNet():
                         k1 = (NNUE_KINDICES - 1) * CHANNELS
                         x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
                         x2[id,:,:,k1:k1+CHANNELS] = ipln[id,BOARDY:,:,:]
-
-
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")

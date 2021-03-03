@@ -2,7 +2,9 @@ from __future__ import print_function
 import os
 import argparse
 import struct
-from train import my_load_model
+import numpy as np
+import matplotlib.pyplot as plt
+from train import my_load_model, NNUE_KIDX
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -62,13 +64,48 @@ def save_weights(m,name):
     myF = open(name,"wb")
     data = struct.pack('i',VERSION)
     myF.write(data)
+    NKIDX = (1 << NNUE_KIDX)
     for layer in m.layers:
         w = layer.get_weights()
         if(len(w) > 0):
             print(layer.__class__.__name__)
             for wi in w:
                 print(wi.shape)
-                wf = wi.flatten()
+                wm = wi
+                #add factorizer weights
+                if wi.shape == ((NKIDX+1)*12*64, 256):
+                    wm = np.zeros(shape=(64*NKIDX*12,256), dtype=np.float32)
+                    for k in range(64):
+                        for i in range(NKIDX):
+                            for j in range(12):
+                                wm[k*NKIDX*12+ i*12+j,:] = \
+                                wi[k*(NKIDX+1)*12+ i*12+j,:] + \
+                                wi[k*(NKIDX+1)*12+NKIDX*12+j,:]
+                    print(str(wm.shape) + " after resize")
+                #clolor plot array
+                if len(wi.shape) ==2 and wi.shape[1] == 256:
+                    nr, nc = NKIDX*8, 12*8
+                    wc = np.zeros(shape=(nr,nc,3), dtype=np.float32)
+                    for k in range(64):
+                        for i in range(NKIDX):
+                            for j in range(12):
+                                r, g, b = 0.5, 0.5, 0.5
+                                for m in range(86):
+                                    r += wm[k*NKIDX*12+ i*12+j,m]
+                                for m in range(86):
+                                    g += wm[k*NKIDX*12+ i*12+j,m + 86]
+                                for m in range(84):
+                                    b += wm[k*NKIDX*12+ i*12+j,m + 172]
+                                wc[(NKIDX - 1 - i)*8+(7 - k/8),(j*8)+k%8,:] = [r,g,b]
+
+                    y, x = np.array([(i,j) for i in range(nr) for j in range(nc)]).T
+                    f, ax1 = plt.subplots(nrows=1)
+                    ax1.imshow(wc)
+                    plt.savefig('weights.png')
+                    # plt.show()
+
+                #save weiights
+                wf = wm.flatten()
                 for x in wf:
                     data = struct.pack('f',x)
                     myF.write(data)
