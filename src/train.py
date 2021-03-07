@@ -37,9 +37,11 @@ HEAD_TYPE = 0
 
 #NNUE
 NNUE_KIDX = 4
-NNUE_KINDICES = (1 << NNUE_KIDX) + 1
-NNUE_CHANNELS = NNUE_KINDICES*12  # NNUE_CHANNELS used during training
-                                  # CHANNELS=12 is used during data processing
+NNUE_KINDICES = (1 << NNUE_KIDX)
+NNUE_FACTORIZER_EXTRA = 2
+NNUE_FACTORIZER = 12 + 6 + NNUE_FACTORIZER_EXTRA
+NNUE_CHANNELS = NNUE_KINDICES*12 + NNUE_FACTORIZER  # NNUE_CHANNELS used during training
+                                                    # CHANNELS=12 is used during data processing
 
 NNUE_KINDEX_TAB = [
    [
@@ -133,6 +135,36 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
             iplanes[r,  f,  ix] = 1.0
+
+            if HEAD_TYPE == 3 and NNUE_FACTORIZER_EXTRA != 0 and ix < 6:
+                iplanes[ix, f, CHANNELS + 0] += 1.0                 #rows
+                iplanes[ix, r, CHANNELS + 1] += 1.0                 #columns
+                iplanes[6, ix, CHANNELS + 0] += 1.0                 #ring-1 (material)
+                if r >= 1 and r < 7 and f >= 1 and f < 7:
+                    iplanes[7, ix, CHANNELS + 0] += 1.0             #ring-2
+                if r >= 2 and r < 6 and f >= 2 and f < 6:
+                    iplanes[6, ix, CHANNELS + 1] += 1.0             #ring-3
+                if r >= 3 and r < 5 and f >= 3 and f < 5:
+                    iplanes[7, ix, CHANNELS + 1] += 1.0             #ring-4 (center)
+                if (r + f) % 2 == 0:
+                    if ix == 3:
+                        iplanes[6, 6, CHANNELS + 0] += 1.0          #bishops on dark-square
+                    if ix == 4:
+                        iplanes[6, 7, CHANNELS + 0] += 1.0          #knights on dark-square
+                    if ix == 5:
+                        iplanes[7, 6, CHANNELS + 0] += 1.0          #pawns on dark-square
+                        if r >= 2 and r < 6 and f >= 2 and f < 6:
+                            iplanes[7, 7, CHANNELS + 0] += 1.0      #center-pawns on dark-square
+                if ix == 3:
+                    if r == f:
+                        iplanes[6, 6, CHANNELS + 1] += 1.0          #bishop on a1-h8 diagonal
+                    if r + f == 7:
+                        iplanes[6, 7, CHANNELS + 1] += 1.0          #bishop on h1-a8 diagonal
+                    if r == f + 1 or r + 1 == f:
+                        iplanes[7, 6, CHANNELS + 1] += 1.0          #bishop on two diagonals closest to a1-h8
+                    if r + f == 6 or r + f == 8:
+                        iplanes[7, 7, CHANNELS + 1] += 1.0          #bishop on two diagonals closest to h1-a8
+
 
 def fill_planes_(iplanes, b, side, flip_rank, flip_file):
     """ Compute piece and attack planes for all pieces"""
@@ -312,7 +344,7 @@ def fill_examples(examples):
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+        iplanes = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.float32)
     else:
         iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
@@ -552,7 +584,7 @@ class NNet():
 
         #arrays
         if HEAD_TYPE == 3:
-            ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+            ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.float32)
         else:
             ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
@@ -602,17 +634,27 @@ class NNet():
         if HEAD_TYPE == 3:
             for id in range(N):
                 if NNUE_KINDICES == 1:
-                    x1[id,:,:,0:CHANNELS] = ipln[id,:BOARDY,:,:]
-                    x2[id,:,:,0:CHANNELS] = ipln[id,BOARDY:,:,:]
+                    x1[id,:,:,:] = ipln[id,:BOARDY,:,:]
+                    x2[id,:,:,:] = ipln[id,BOARDY:,:,:]
                 else:
                     k1 = ikin[id][0] * CHANNELS
                     k2 = ikin[id][1] * CHANNELS
-                    x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
-                    x2[id,:,:,k2:k2+CHANNELS] = ipln[id,BOARDY:,:,:]
-                    if (NNUE_KINDICES % 2) != 0:
-                        k1 = (NNUE_KINDICES - 1) * CHANNELS
-                        x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:]
-                        x2[id,:,:,k1:k1+CHANNELS] = ipln[id,BOARDY:,:,:]
+                    x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:CHANNELS]
+                    x2[id,:,:,k2:k2+CHANNELS] = ipln[id,BOARDY:,:,:CHANNELS]
+                    if NNUE_FACTORIZER != 0:
+                        k1 = NNUE_KINDICES * CHANNELS
+                        x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:CHANNELS]
+                        x2[id,:,:,k1:k1+CHANNELS] = ipln[id,BOARDY:,:,:CHANNELS]
+                        k1 += CHANNELS
+                        x1[id,:,:,k1:k1+6] = ipln[id,:BOARDY,:,:6]
+                        x2[id,:,:,k1:k1+6] = ipln[id,BOARDY:,:,:6]
+                        k1 += 6
+                        if NNUE_FACTORIZER_EXTRA != 0:
+                            x1[id,:,:,k1:k1+NNUE_FACTORIZER_EXTRA] = \
+                                ipln[id,:BOARDY,:,CHANNELS:(CHANNELS+NNUE_FACTORIZER_EXTRA)]
+                            x2[id,:,:,k1:k1+NNUE_FACTORIZER_EXTRA] = \
+                                ipln[id,BOARDY:,:,CHANNELS:(CHANNELS+NNUE_FACTORIZER_EXTRA)]
+                            k1 += NNUE_FACTORIZER_EXTRA
 
         end_t = time.time()
         print("Time", int(end_t - start_t), "sec")
