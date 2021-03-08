@@ -39,7 +39,7 @@ HEAD_TYPE = 0
 NNUE_KIDX = 4
 NNUE_KINDICES = (1 << NNUE_KIDX)
 NNUE_FACTORIZER_EXTRA = 2
-NNUE_FACTORIZER = 12 + 6 + NNUE_FACTORIZER_EXTRA
+NNUE_FACTORIZER = 12 + NNUE_FACTORIZER_EXTRA
 NNUE_CHANNELS = NNUE_KINDICES*12 + NNUE_FACTORIZER  # NNUE_CHANNELS used during training
                                                     # CHANNELS=12 is used during data processing
 
@@ -646,9 +646,6 @@ class NNet():
                         x1[id,:,:,k1:k1+CHANNELS] = ipln[id,:BOARDY,:,:CHANNELS]
                         x2[id,:,:,k1:k1+CHANNELS] = ipln[id,BOARDY:,:,:CHANNELS]
                         k1 += CHANNELS
-                        x1[id,:,:,k1:k1+6] = ipln[id,:BOARDY,:,:6]
-                        x2[id,:,:,k1:k1+6] = ipln[id,BOARDY:,:,:6]
-                        k1 += 6
                         if NNUE_FACTORIZER_EXTRA != 0:
                             x1[id,:,:,k1:k1+NNUE_FACTORIZER_EXTRA] = \
                                 ipln[id,:BOARDY,:,CHANNELS:(CHANNELS+NNUE_FACTORIZER_EXTRA)]
