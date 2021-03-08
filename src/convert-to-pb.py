@@ -14,7 +14,7 @@ try:
 except:
     pass
 
-SAVE_BIN = True
+SAVE_BIN = False
 VERSION = 0
 
 def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
@@ -110,20 +110,11 @@ def save_weights(m,name):
                                 wm[k*NNUE_KINDICES*12+i*12+j,:] =  \
                                         wi[k*NNUE_CHANNELS+i*12+j,:] + \
                                         wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
-                    plt.subplot(1,3,1)
+                    plt.subplot(1,2,1)
                     plot(wm,'kpsqt')
 
-                    #psqt factorizer
-                    for k in range(64):
-                        for i in range(NNUE_KINDICES):
-                            for j in range(6):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] += \
-                                        wi[k*NNUE_CHANNELS+(NNUE_KINDICES+1)*12+j,:]
-                    plt.subplot(1,3,2)
-                    plot(wm,'psqt')
-
-                    #file,rank,and 4-ring factorizors
-                    ch = (NNUE_KINDICES+1)*12+6
+                    #file,rank,and 4 rings factorizors
+                    ch = (NNUE_KINDICES+1)*12
                     for k in range(64):
                         f = k % 8
                         r = k / 8
@@ -157,11 +148,8 @@ def save_weights(m,name):
                                         wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
                                     if r + f == 6 or r + f == 8:
                                         wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
-                    plt.subplot(1,3,3)
-                    plot(wm,'frc',2)
-                    has_plot = True
-                elif len(wi.shape) ==2 and wi.shape[1] == 256:
-                    plot(wm)
+                    plt.subplot(1,2,2)
+                    plot(wm,'frcb',2)
                     has_plot = True
 
                 if has_plot:
