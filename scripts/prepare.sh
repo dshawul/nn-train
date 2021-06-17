@@ -32,9 +32,9 @@ for i in $RN; do
       cp ${NDIR}/ID-$2-model-3.pb ${NDIR}/net-20x256.pb
       cp ${NDIR}/ID-$2-model-3.uff ${NDIR}/net-20x256.uff
    elif [ $i -eq 4 ]; then
-      cp ${NDIR}/ID-$2-model-4 ${NDIR}/net-30x384
-      cp ${NDIR}/ID-$2-model-4.pb ${NDIR}/net-30x384.pb
-      cp ${NDIR}/ID-$2-model-4.uff ${NDIR}/net-30x384.uff
+      cp ${NDIR}/ID-$2-model-4 ${NDIR}/net-24x324
+      cp ${NDIR}/ID-$2-model-4.pb ${NDIR}/net-24x324.pb
+      cp ${NDIR}/ID-$2-model-4.uff ${NDIR}/net-24x324.uff
    elif [ $i -eq 5 ]; then
       cp ${NDIR}/ID-$2-model-5 ${NDIR}/net-nnue
       cp ${NDIR}/ID-$2-model-5.pb ${NDIR}/net-nnue.pb
