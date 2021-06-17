@@ -3,8 +3,7 @@ from tensorflow.keras.layers import (
     Input,
     Dense,
     Flatten,
-    Concatenate,
-    Reshape
+    Concatenate
 )
 from tensorflow.keras import activations
 from tensorflow.keras.regularizers import l2

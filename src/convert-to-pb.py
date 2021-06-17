@@ -96,7 +96,7 @@ def save_weights(m,name):
                 wm = wi
                 has_plot = False
                 #add factorizer weights
-                if wi.shape == (64*NNUE_CHANNELS, 256):
+                if wi.shape == (64*NNUE_CHANNELS, 256) and NNUE_KINDICES > 1:
                     win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, 256),1,0)
                     wm = np.zeros(shape=(64*NNUE_KINDICES*12, 256), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
