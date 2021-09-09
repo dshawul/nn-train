@@ -34,6 +34,7 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
+MAX_QUEUE = 1
 
 #NNUE
 NNUE_KIDX = 4
@@ -571,18 +572,13 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,examples,local_steps,args):
-        print("Generating input planes using", args.cores, "cores")
+    def train(self,N,res,local_steps,args):
+
+        # generate X and Y
         start_t = time.time()
-
-        N = len(examples)
-
-        #multiprocess
         nlen = N / args.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
-        res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
-        #arrays
         if HEAD_TYPE == 3:
             ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.float32)
         else:
@@ -654,10 +650,9 @@ class NNet():
                             k1 += NNUE_FACTORIZER_EXTRA
 
         end_t = time.time()
-        print("Time", int(end_t - start_t), "sec")
+        print("Generated X and Y in ", int(end_t - start_t), "sec")
 
         #sampe weight
-        start_t = end_t
         vweights = None
         pweights = None
         if args.pol_grad > 0:
@@ -687,9 +682,6 @@ class NNet():
                       initial_epoch=initial_epoch,
                       epochs=epochs,
                       callbacks=[tensorboard_callback])
-
-        end_t = time.time()
-        print("Training time", int(end_t - start_t), "sec")
 
     def save_checkpoint(self, chunk, args, iopt=False):
         filepath = os.path.join(args.dir, "ID-" + str(chunk))
@@ -741,14 +733,13 @@ class NNet():
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(1)
 
-def train_epd(myNet,args,myEpd,start=1):
+def get_chunk(myNet,args,myEpd,start):
 
     with (open(myEpd) if not args.gzip else gzip.open(myEpd)) as file:
         count = 0
 
         examples = []
         start_t = time.time()
-        print("Collecting data")
 
         while True:
 
@@ -777,26 +768,59 @@ def train_epd(myNet,args,myEpd,start=1):
                    else:
                         break
 
-                if len(examples) > 0:
-                    print("Time", int(end_t - start_t), "sec")
-                    print("Training on chunk ", chunk , " ending at position ", count, " with lr ", args.lr)
-                    myNet.train(examples,(chunk-1)*NBATCH,args)
+                N = len(examples)
+                if N > 0:
+                    #multiprocess epd
+                    nlen = N / args.cores
+                    slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
+                    res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
-                    start_t = time.time()
-                    if chunk % args.rsavo == 0:
-                        myNet.save_checkpoint(chunk, args, True)
-                    elif chunk % args.rsav == 0:
-                        myNet.save_checkpoint(chunk, args, False)
-                    end_t = time.time()
-                    print("Saving time", int(end_t - start_t), "sec")
-
-                    start_t = time.time()
                     examples = []
-                    print("Collecting data")
+                    yield N,res
 
             #break out
             if not line:
                 break
+
+def gen_func(gen,queue):
+    while True:
+        if queue.qsize() < MAX_QUEUE:
+            try:
+                queue.put(next(gen))
+            except StopIteration:
+                break
+        else:
+            time.sleep(0.1)
+
+def train_epd(myNet,args,myEpd,start=1):
+    gen = get_chunk(myNet,args,myEpd,start)
+    N,res = next(gen)
+    queue = mp.Queue()
+    p1 = mp.Process(target = gen_func, args=(gen,queue))
+    p1.start()
+
+    chunk = 1
+    while True:
+        print("Training on chunk ", chunk , " ending at position ",
+            chunk * EPD_CHUNK_SIZE, " with lr ", args.lr)
+
+        myNet.train(N,res,(chunk-1)*NBATCH,args)
+
+        p1.join(timeout=0)
+        if not p1.is_alive():
+            break
+
+        del res
+        N,res = queue.get()
+
+        if chunk % args.rsavo == 0:
+            myNet.save_checkpoint(chunk, args, True)
+        elif chunk % args.rsav == 0:
+            myNet.save_checkpoint(chunk, args, False)
+
+        chunk = chunk + 1
+
+    print("===== Finished training ====")
 
 def main(argv):
     global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
