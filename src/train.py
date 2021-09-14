@@ -782,21 +782,33 @@ def get_chunk(myNet,args,myEpd,start):
             if not line:
                 break
 
-def gen_func(gen,queue):
-    while True:
-        if queue.qsize() < MAX_QUEUE:
-            try:
-                queue.put(next(gen))
-            except StopIteration:
-                break
-        else:
-            time.sleep(0.1)
+class MyProcess(mp.Process):
+
+    def __init__(self,gen,queue):
+        mp.Process.__init__(self)
+        self.exit = mp.Event()
+        self.gen = gen
+        self.queue = queue
+
+    def run(self):
+        while not self.exit.is_set():
+            if self.queue.qsize() < MAX_QUEUE:
+                try:
+                    self.queue.put(next(self.gen))
+                except StopIteration:
+                    break
+            else:
+                time.sleep(0.1)
+        print("Exited process")
+
+    def shutdown(self):
+        self.exit.set()
 
 def train_epd(myNet,args,myEpd,start=1):
     gen = get_chunk(myNet,args,myEpd,start)
     N,res = next(gen)
     queue = mp.Queue()
-    p1 = mp.Process(target = gen_func, args=(gen,queue))
+    p1 = MyProcess(gen,queue)
     p1.start()
 
     chunk = 1
@@ -807,19 +819,23 @@ def train_epd(myNet,args,myEpd,start=1):
         myNet.train(N,res,(chunk-1)*NBATCH,args)
 
         p1.join(timeout=0)
-        if not p1.is_alive():
-            break
+        alive = p1.is_alive()
 
-        del res
-        N,res = queue.get()
+        if alive:
+            del res
+            N,res = queue.get()
 
         if chunk % args.rsavo == 0:
             myNet.save_checkpoint(chunk, args, True)
         elif chunk % args.rsav == 0:
             myNet.save_checkpoint(chunk, args, False)
 
+        if not alive:
+            break
+
         chunk = chunk + 1
 
+    p1.shutdown()
     print("===== Finished training ====")
 
 def main(argv):
