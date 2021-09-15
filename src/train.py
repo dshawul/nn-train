@@ -786,12 +786,11 @@ class MyProcess(mp.Process):
 
     def __init__(self,gen,queue):
         mp.Process.__init__(self)
-        self.exit = mp.Event()
         self.gen = gen
         self.queue = queue
 
     def run(self):
-        while not self.exit.is_set():
+        while True:
             if self.queue.qsize() < MAX_QUEUE:
                 try:
                     self.queue.put(next(self.gen))
@@ -799,10 +798,6 @@ class MyProcess(mp.Process):
                     break
             else:
                 time.sleep(0.1)
-        print("Exited process")
-
-    def shutdown(self):
-        self.exit.set()
 
 def train_epd(myNet,args,myEpd,start=1):
     gen = get_chunk(myNet,args,myEpd,start)
@@ -819,9 +814,7 @@ def train_epd(myNet,args,myEpd,start=1):
         myNet.train(N,res,(chunk-1)*NBATCH,args)
 
         p1.join(timeout=0)
-        alive = p1.is_alive()
-
-        if alive:
+        if p1.is_alive():
             del res
             N,res = queue.get()
 
@@ -830,12 +823,13 @@ def train_epd(myNet,args,myEpd,start=1):
         elif chunk % args.rsav == 0:
             myNet.save_checkpoint(chunk, args, False)
 
-        if not alive:
+        p1.join(timeout=0)
+        if not p1.is_alive():
             break
 
         chunk = chunk + 1
 
-    p1.shutdown()
+    p1.terminate()
     print("===== Finished training ====")
 
 def main(argv):
