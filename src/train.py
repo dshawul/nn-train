@@ -575,7 +575,6 @@ class NNet():
     def train(self,N,res,local_steps,args):
 
         # generate X and Y
-        start_t = time.time()
         nlen = N / args.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
@@ -648,9 +647,6 @@ class NNet():
                             x2[id,:,:,k1:k1+NNUE_FACTORIZER_EXTRA] = \
                                 ipln[id,BOARDY:,:,CHANNELS:(CHANNELS+NNUE_FACTORIZER_EXTRA)]
                             k1 += NNUE_FACTORIZER_EXTRA
-
-        end_t = time.time()
-        print("Generated X and Y in ", int(end_t - start_t), "sec")
 
         #sampe weight
         vweights = None
@@ -801,7 +797,11 @@ class MyProcess(mp.Process):
 
 def train_epd(myNet,args,myEpd,chunk,start=1):
     gen = get_chunk(myNet,args,myEpd,start)
+    s = time.time()
     N,res = next(gen)
+    e = time.time()
+    print("Average chunk prep time ", int(e - s), "sec")
+
     queue = mp.Queue()
     p1 = MyProcess(gen,queue)
     p1.start()
@@ -809,6 +809,7 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
     while True:
         print("Training on chunk ", chunk , " ending at position ",
             chunk * EPD_CHUNK_SIZE, " with lr ", args.lr)
+        s = time.time()
 
         myNet.train(N,res,(chunk-1)*NBATCH,args)
 
@@ -821,6 +822,9 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
             myNet.save_checkpoint(chunk, args, True)
         elif chunk % args.rsav == 0:
             myNet.save_checkpoint(chunk, args, False)
+
+        e = time.time()
+        print("Total time ", int(e - s), "sec")
 
         p1.join(timeout=0)
         if not p1.is_alive():
