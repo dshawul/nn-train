@@ -9,13 +9,12 @@ from tensorflow.keras.layers import (
     Add,
     Reshape,
     GlobalAveragePooling2D,
-    Multiply,
-    Permute
+    Multiply
 )
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.backend import learning_phase
 
-CHANNEL_AXIS = 3
+CHANNEL_AXIS = 1
 V_BATCH_SIZE = None
 RENORM = False
 RENORM_RMAX = 1.0
@@ -37,7 +36,7 @@ def dense(x, n, name, act='relu'):
 
 def conv(x, filters, size, name):
 
-    x = Conv2D(filters=filters, kernel_size=size,
+    x = Conv2D(filters=filters, kernel_size=size, data_format='channels_first',
                   strides=(1,1), padding="same",
                   use_bias=False,
                   kernel_initializer=K_INIT,
@@ -99,20 +98,16 @@ def bn_relu_conv(x, filters, size, scale, name):
 
 def squeeze_excite_block(inp, filters, ratio, name):
 
-    inp = Permute((3,1,2),name=name+"_permute_1")(inp)
-    x = GlobalAveragePooling2D('channels_first',
-                  name=name+"_avg_pool")(inp)
+    x = GlobalAveragePooling2D(data_format='channels_first',name=name+"_avg_pool")(inp)
     x = dense(x, filters // ratio, name+"_dense_1")
     x = dense(x, filters, name+"_dense_2", act='sigmoid')
     x = Reshape((filters,1,1),name=name+"_reshape")(x)
     x = Multiply(name=name+"_multiply")([inp,x])
-    x = Permute((2,3,1),name=name+"_permute_2")(x)
     return x
 
 def pool_layer(x, name):
 
-    x = Permute((3,1,2),name=name+"_permute")(x)
-    x = GlobalAveragePooling2D('channels_first', name=name+"_avg_pool")(x)
+    x = GlobalAveragePooling2D(data_format='channels_first', name=name+"_avg_pool")(x)
     return x
 
 def build_post_net(x, blocks,filters):
@@ -180,7 +175,7 @@ def score_head(x, filters, pol_channels):
 
     return score
 
-def build_net(main_input_shape,  blocks, filters, pol_channels, HEAD_TYPE):
+def build_net(main_input_shape, blocks, filters, pol_channels, HEAD_TYPE):
 
     main_input = Input(shape=main_input_shape, name='main_input')
     x = main_input

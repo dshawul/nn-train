@@ -63,16 +63,16 @@ def plot(wm,name="",scale=8):
     """
     nr, nc = NNUE_KINDICES*8, 12*8
     wc = np.zeros(shape=(nr,nc,3), dtype=np.float32)
-    for k in range(64):
-        for i in range(NNUE_KINDICES):
-            for j in range(12):
+    for i in range(NNUE_KINDICES):
+        for j in range(12):
+            for k in range(64):
                 r, g, b = 2.0, 2.0, 2.0
                 for m in range(86):
-                    r += wm[k*NNUE_KINDICES*12+i*12+j,m]*scale
+                    r += wm[i*12*64+j*64+k,m]*scale
                 for m in range(86):
-                    g += wm[k*NNUE_KINDICES*12+i*12+j,m+86]*scale
+                    g += wm[i*12*64+j*64+k,m+86]*scale
                 for m in range(84):
-                    b += wm[k*NNUE_KINDICES*12+i*12+j,m+172]*scale
+                    b += wm[i*12*64+j*64+k,m+172]*scale
                 r, g, b = r/4, g/4, b/4
                 wc[(NNUE_KINDICES-1-i)*8 + (7-k/8), (j*8)+k%8, :] = [r,g,b]
                 # print(r,g,b)
@@ -97,19 +97,19 @@ def save_weights(m,name):
                 has_plot = False
                 #add factorizer weights
                 if wi.shape == (64*NNUE_CHANNELS, 256) and NNUE_KINDICES > 1:
-                    win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, 256),1,0)
-                    wm = np.zeros(shape=(64*NNUE_KINDICES*12, 256), dtype=np.float32)
+                    win = wi.reshape(NNUE_CHANNELS, 64, 256)
+                    wm = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
 
                     plt.figure(figsize=(20, 10))
 
                     #k-psqt factorizer
-                    for k in range(64):
-                        for i in range(NNUE_KINDICES):
-                            for j in range(12):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] =  \
-                                        wi[k*NNUE_CHANNELS+i*12+j,:] + \
-                                        wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
+                    for i in range(NNUE_KINDICES):
+                        for j in range(12):
+                            for k in range(64):
+                                wm[i*12*64+j*64+k,:] =  \
+                                        wi[i*12*64+j*64+k,:] + \
+                                        wi[NNUE_KINDICES*12*64+j*64+k,:]
                     plt.subplot(1,2,1)
                     plot(wm,'kpsqt')
 
@@ -120,34 +120,34 @@ def save_weights(m,name):
                         r = k / 8
                         for i in range(NNUE_KINDICES):
                             for j in range(6):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] += \
+                                wm[i*12*64+j*64+k,:] += \
                                     win[ch+0,j*8+f,:] + \
                                     win[ch+1,j*8+r,:] + \
                                     win[ch+0,6*8+j,:]
                                 if r >= 1 and r < 7 and f >= 1 and f < 7:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+j,:]
+                                    wm[i*12*64+j*64+k,:] += win[ch+0,7*8+j,:]
                                 if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+j,:]
+                                    wm[i*12*64+j*64+k,:] += win[ch+1,6*8+j,:]
                                 if r >= 3 and r < 5 and f >= 3 and f < 5:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+j,:]
+                                    wm[i*12*64+j*64+k,:] += win[ch+1,7*8+j,:]
                                 if (r + f) % 2 == 0:
                                     if j == 3:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+6,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+0,6*8+6,:]
                                     if j == 4:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+7,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+0,6*8+7,:]
                                     if j == 5:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+6,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+0,7*8+6,:]
                                         if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+7,:]
+                                            wm[i*12*64+j*64+k,:] += win[ch+0,7*8+7,:]
                                 if j == 3:
                                     if r == f:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+6,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+1,6*8+6,:]
                                     if r + f == 7:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+7,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+1,6*8+7,:]
                                     if r == f + 1 or r + 1 == f:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+1,7*8+6,:]
                                     if r + f == 6 or r + f == 8:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
+                                        wm[i*12*64+j*64+k,:] += win[ch+1,7*8+7,:]
                     plt.subplot(1,2,2)
                     plot(wm,'frcb',2)
                     has_plot = True
