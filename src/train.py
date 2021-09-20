@@ -799,14 +799,13 @@ class MyProcess(mp.Process):
             else:
                 time.sleep(0.1)
 
-def train_epd(myNet,args,myEpd,start=1):
+def train_epd(myNet,args,myEpd,chunk,start=1):
     gen = get_chunk(myNet,args,myEpd,start)
     N,res = next(gen)
     queue = mp.Queue()
     p1 = MyProcess(gen,queue)
     p1.start()
 
-    chunk = 1
     while True:
         print("Training on chunk ", chunk , " ending at position ",
             chunk * EPD_CHUNK_SIZE, " with lr ", args.lr)
@@ -926,7 +925,7 @@ def main(argv):
         if not exists:
             myNet.save_checkpoint(chunk, args)
         start = chunk * EPD_CHUNK_SIZE + 1
-        train_epd(myNet, args, args.epd, start)
+        train_epd(myNet, args, args.epd, chunk, start)
 
 
 if __name__ == "__main__":
