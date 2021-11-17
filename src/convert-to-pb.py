@@ -4,7 +4,7 @@ import argparse
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
-from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS
+from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS, NNUE_FEATURES, NNUE_FACTORIZER, NNUE_FACTORIZER_EXTRA
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -17,33 +17,33 @@ except:
 SAVE_BIN = False
 VERSION = 0
 
-def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
-    """
-    Freezes the state of a session into a pruned computation graph.
+def freeze_model(model):
+    from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
-    Creates a new computation graph where variable nodes are replaced by
-    constants taking their current value in the session. The new graph will be
-    pruned so subgraphs that are not necessary to compute the requested
-    outputs are removed.
-    @param session The TensorFlow session to be frozen.
-    @param keep_var_names A list of variable names that should not be frozen,
-                          or None to freeze all the variables in the graph.
-    @param output_names Names of the relevant graph outputs.
-    @param clear_devices Remove the device directives from the graph for better portability.
-    @return The frozen graph definition.
-    """
-    graph = session.graph
-    with graph.as_default():
-        freeze_var_names = list(set(v.op.name for v in tf.global_variables()).difference(keep_var_names or []))
-        output_names = output_names or []
-        output_names += [v.op.name for v in tf.global_variables()]
-        input_graph_def = graph.as_graph_def()
-        if clear_devices:
-            for node in input_graph_def.node:
-                node.device = ""
-        frozen_graph = tf.graph_util.convert_variables_to_constants(session, input_graph_def,
-                                                      output_names, freeze_var_names)
-        return frozen_graph
+    # Convert Keras model to ConcreteFunction
+    full_model = tf.function(lambda x: model(x))
+    input_types = []
+    for inp in model.inputs:
+        input_types.append(inp.type_spec)
+    full_model = full_model.get_concrete_function(input_types)
+
+    # Get frozen ConcreteFunction
+    frozen_func = convert_variables_to_constants_v2(full_model)
+    frozen_func.graph.as_graph_def()
+
+    layers = [op.name for op in frozen_func.graph.get_operations()]
+    print("-" * 50)
+    print("Frozen model layers: ")
+    for layer in layers:
+        print(layer)
+
+    print("-" * 50)
+    print("Frozen model inputs: ")
+    print(frozen_func.inputs)
+    print("Frozen model outputs: ")
+    print(frozen_func.outputs)
+
+    return frozen_func.graph
 
 def copy_weights(m1,m2):
     """
@@ -96,60 +96,69 @@ def save_weights(m,name):
                 wm = wi
                 has_plot = False
                 #add factorizer weights
-                if wi.shape == (64*NNUE_CHANNELS, 256) and NNUE_KINDICES > 1:
+                if wi.shape == (NNUE_FEATURES, 256) and NNUE_KINDICES > 1:
                     win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, 256),1,0)
-                    wm = np.zeros(shape=(64*NNUE_KINDICES*12, 256), dtype=np.float32)
+                    wm = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
 
                     plt.figure(figsize=(20, 10))
 
-                    #k-psqt factorizer
+                    #no factorizer
                     for k in range(64):
                         for i in range(NNUE_KINDICES):
                             for j in range(12):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] =  \
-                                        wi[k*NNUE_CHANNELS+i*12+j,:] + \
-                                        wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
-                    plt.subplot(1,2,1)
-                    plot(wm,'kpsqt')
+                                wm[k*NNUE_KINDICES*12+i*12+j,:] =  wi[k*NNUE_CHANNELS+i*12+j,:]
+                    plt.subplot(1,3,1)
+                    plot(wm,'plain')
+
+                    #k-psqt factorizer
+                    if NNUE_FACTORIZER > 0:
+                        for k in range(64):
+                            for i in range(NNUE_KINDICES):
+                                for j in range(12):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
+                        plt.subplot(1,3,2)
+                        plot(wm,'kpsqt')
 
                     #file,rank,and 4 rings factorizors
-                    ch = (NNUE_KINDICES+1)*12
-                    for k in range(64):
-                        f = k % 8
-                        r = k / 8
-                        for i in range(NNUE_KINDICES):
-                            for j in range(6):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] += \
-                                    win[ch+0,j*8+f,:] + \
-                                    win[ch+1,j*8+r,:] + \
-                                    win[ch+0,6*8+j,:]
-                                if r >= 1 and r < 7 and f >= 1 and f < 7:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+j,:]
-                                if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+j,:]
-                                if r >= 3 and r < 5 and f >= 3 and f < 5:
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+j,:]
-                                if (r + f) % 2 == 0:
+                    if NNUE_FACTORIZER_EXTRA > 0:
+                        ch = (NNUE_KINDICES+1)*12
+                        for k in range(64):
+                            f = k % 8
+                            r = k // 8
+                            for i in range(NNUE_KINDICES):
+                                for j in range(6):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += \
+                                        win[ch+0,j*8+f,:] + \
+                                        win[ch+1,j*8+r,:] + \
+                                        win[ch+0,6*8+j,:]
+                                    if r >= 1 and r < 7 and f >= 1 and f < 7:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+j,:]
+                                    if r >= 2 and r < 6 and f >= 2 and f < 6:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+j,:]
+                                    if r >= 3 and r < 5 and f >= 3 and f < 5:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+j,:]
+                                    if (r + f) % 2 == 0:
+                                        if j == 3:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+6,:]
+                                        if j == 4:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+7,:]
+                                        if j == 5:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+6,:]
+                                            if r >= 2 and r < 6 and f >= 2 and f < 6:
+                                                wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+7,:]
                                     if j == 3:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+6,:]
-                                    if j == 4:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+7,:]
-                                    if j == 5:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+6,:]
-                                        if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+7,:]
-                                if j == 3:
-                                    if r == f:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+6,:]
-                                    if r + f == 7:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+7,:]
-                                    if r == f + 1 or r + 1 == f:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
-                                    if r + f == 6 or r + f == 8:
-                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
-                    plt.subplot(1,2,2)
-                    plot(wm,'frcb',2)
+                                        if r == f:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+6,:]
+                                        if r + f == 7:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+7,:]
+                                        if r == f + 1 or r + 1 == f:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
+                                        if r + f == 6 or r + f == 8:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
+                    plt.subplot(1,3,3)
+                    plot(wm,'material')
+
                     has_plot = True
 
                 if has_plot:
@@ -167,7 +176,6 @@ def convertGraph(modelPath, inferPath, outdir, name):
     from tensorflow.python.framework import graph_io
 
     tf.keras.backend.set_learning_phase(0)
-    sess = tf.keras.backend.get_session()
 
     #defaults
     if outdir == None:
@@ -190,7 +198,6 @@ def convertGraph(modelPath, inferPath, outdir, name):
         net_model.save(modelPath, include_optimizer=False, save_format='h5')
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(0)
-        sess = tf.keras.backend.get_session()
         net_model = my_load_model(modelPath)
     else:
         net_model = my_load_model(modelPath)
@@ -201,12 +208,13 @@ def convertGraph(modelPath, inferPath, outdir, name):
         save_weights(net_model, fpath)
         print('Raw weights: ', fpath)
 
-    #freeze graph
-    output_names = [out.op.name for out in net_model.outputs]
-    constant_graph = freeze_session(sess, output_names=output_names)
+    constant_graph = freeze_model(net_model)
 
-    # Write the graph in binary .pb file
-    graph_io.write_graph(constant_graph, outdir, name + ".pb", as_text=False)
+    # Save frozen graph from frozen ConcreteFunction to hard drive
+    tf.io.write_graph(graph_or_graph_def=constant_graph,
+                      logdir=outdir,
+                      name=name+".pb",
+                      as_text=False)
     print('Frozen graph: ', os.path.join(outdir, name + ".pb"))
 
 if __name__ == '__main__':
