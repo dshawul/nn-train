@@ -40,8 +40,7 @@ MAX_QUEUE = 1
 NNUE_KIDX = 4
 NNUE_KINDICES = (1 << NNUE_KIDX)
 NNUE_FACTORIZER = (12 if NNUE_KIDX > 0 else 0)
-NNUE_CHANNELS = NNUE_KINDICES*12 + NNUE_FACTORIZER  # NNUE_CHANNELS used during training
-                                                    # CHANNELS=12 is used during data processing
+NNUE_CHANNELS = NNUE_KINDICES*12 + NNUE_FACTORIZER
 
 NNUE_KINDEX_TAB = [
    [
@@ -106,9 +105,9 @@ NNUE_KINDEX_TAB = [
    ]
 ]
 
+#NN
 def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
     """ Compute piece placement and attack plane for a given piece type """
-
     if AUX_INP:
         abb = 0
         squares = chess.SquareSet(bb)
@@ -135,7 +134,6 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
             iplanes[ix, r,  f] = 1
-
 
 def fill_planes_(iplanes, b, side, flip_rank, flip_file):
     """ Compute piece and attack planes for all pieces"""
@@ -171,6 +169,7 @@ def fill_planes_(iplanes, b, side, flip_rank, flip_file):
     bb = b.pawns   & b.occupied_co[npl]
     fill_piece(iplanes,11,bb,b,flip_rank,flip_file)
 
+
 def fill_planes(iplanes, b):
     """ Compute input planes for ResNet training """
 
@@ -200,28 +199,93 @@ def fill_planes(iplanes, b):
     iplanes[CHANNELS - 2, :, :] = b.halfmove_clock / 100.0
     iplanes[CHANNELS - 1, :, :] = 1
 
-def fill_planes_nnue_(iplanes, ikings, b, side):
+#NNUE
 
-    #fill planes
-    flip_rank = (side == chess.BLACK)
-    flip_file = (chess.square_file(b.king(side)) < 4)
-    fill_planes_(iplanes, b, side, flip_rank, flip_file)
+def fill_piece_nnue(iplanes, cidx, kidx, ix, bb, flip_rank, flip_file):
+    """ Compute piece placement and attack plane for a given piece type """
+    squares = chess.SquareSet(bb)
+    for sq in squares:
+        f = chess.square_file(sq)
+        r = chess.square_rank(sq)
+        if flip_rank: r = RANK_U - r
+        if flip_file: f = FILE_U - f
+        off = ix * 64 + r * 8 + f
+
+        iplanes[cidx,1] = kidx * 768 + off
+        cidx = cidx + 1
+
+        if NNUE_FACTORIZER > 0:
+            iplanes[cidx,1] = NNUE_KINDICES * 768 + off
+            cidx = cidx + 1
+
+    return cidx
+
+def fill_planes_nnue_(iplanes, cidx, pid, kidx, b, side, flip_rank, flip_file):
+    """ Compute piece and attack planes for all pieces"""
+
+    pl = side
+    npl = not side
+
+    st = cidx
+
+    #white piece attacks
+    bb = b.kings   & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,0,bb,flip_rank,flip_file)
+    bb = b.queens  & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,1,bb,flip_rank,flip_file)
+    bb = b.rooks   & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,2,bb,flip_rank,flip_file)
+    bb = b.bishops & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,3,bb,flip_rank,flip_file)
+    bb = b.knights & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,4,bb,flip_rank,flip_file)
+    bb = b.pawns   & b.occupied_co[pl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,5,bb,flip_rank,flip_file)
+
+    #black piece attacks
+    bb = b.kings   & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,6,bb,flip_rank,flip_file)
+    bb = b.queens  & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,7,bb,flip_rank,flip_file)
+    bb = b.rooks   & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,8,bb,flip_rank,flip_file)
+    bb = b.bishops & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,9,bb,flip_rank,flip_file)
+    bb = b.knights & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,10,bb,flip_rank,flip_file)
+    bb = b.pawns   & b.occupied_co[npl]
+    cidx = fill_piece_nnue(iplanes,cidx,kidx,11,bb,flip_rank,flip_file)
+
+    iplanes[st:cidx, 0] = pid
+    return cidx
+
+def fill_planes_nnue_one(iplanes, cidx, pid,  b, side):
 
     #king index
     ksq = b.king(side)
     f = chess.square_file(ksq)
     r = chess.square_rank(ksq)
+    flip_rank = (side == chess.BLACK)
+    flip_file = (f < 4)
     if flip_rank: r = RANK_U - r
     if flip_file: f = FILE_U - f
     kindex = r * BOARDX // 2 + (f - BOARDX // 2)
-    ikings[0] = NNUE_KINDEX_TAB[NNUE_KIDX][kindex]
+    kidx = NNUE_KINDEX_TAB[NNUE_KIDX][kindex]
 
-def fill_planes_nnue(iplanes, ikings, b):
+    #fill planes
+    cidx = fill_planes_nnue_(iplanes, cidx, pid, kidx, b, side, flip_rank, flip_file)
+
+    return cidx
+
+def fill_planes_nnue(iplanes, cidx, pid, b):
     """ Compute input planes for NNUE training """
 
-    fill_planes_nnue_(iplanes[:CHANNELS,:,:], ikings[:1], b, b.turn)
-    fill_planes_nnue_(iplanes[CHANNELS:,:,:], ikings[1:], b, not b.turn)
+    fill_planes_nnue_one(iplanes[0,:,:], cidx, pid, b, b.turn)
+    cidx = fill_planes_nnue_one(iplanes[1,:,:], cidx, pid, b, not b.turn)
 
+    return cidx
+
+# FEN for variants
 def fill_planes_fen(iplanes, fen, player):
 
     #flip rank
@@ -310,12 +374,12 @@ def fill_planes_fen(iplanes, fen, player):
     iplanes[CHANNELS - 2, :, :] = float(words[3]) / 100.0
     iplanes[CHANNELS - 1, :, :] = 1
 
-def fill_examples(examples):
+def fill_examples(examples, spid):
 
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(N,2*CHANNELS,BOARDY,BOARDX),dtype=np.int8)
+        iplanes = np.zeros(shape=(2,N*64,2), dtype=np.uint)
     else:
         iplanes = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
@@ -334,10 +398,10 @@ def fill_examples(examples):
         ret = [iplanes, oresult, ovalue, opolicy, oscore]
     else:
         ovalue = np.zeros(shape=(N,),dtype=np.float32)
-        ikings = np.zeros(shape=(N,2),dtype=np.int8)
-        ret = [iplanes, oresult, ovalue, ikings]
 
     #parse each example
+    cidx = 0
+
     for id,line in enumerate(examples):
 
         words = line.strip().split()
@@ -432,12 +496,15 @@ def fill_examples(examples):
         #input planes
         if HEAD_TYPE == 3:
             bb = chess.Board(fen)
-            fill_planes_nnue(iplanes[id,:,:,:],ikings[id,:],bb)
+            cidx = fill_planes_nnue(iplanes,cidx,spid+id,bb)
         elif AUX_INP:
             bb = chess.Board(fen)
             fill_planes(iplanes[id,:,:,:],bb)
         else:
             fill_planes_fen(iplanes[id,:,:,:],fen,words,player)
+
+    if HEAD_TYPE == 3:
+        ret = [iplanes[:,:cidx,:], oresult, ovalue]
 
     return ret
 
@@ -454,7 +521,7 @@ def build_model(cid):
     elif cid == 4:
         return resnet.build_net(INPUT_SHAPE, 24, 320, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 5:
-        INPUT_SHAPE=(NNUE_CHANNELS, BOARDY, BOARDX)
+        INPUT_SHAPE=(NNUE_CHANNELS*BOARDY*BOARDX,)
         return nnue.build_net(INPUT_SHAPE)
     else:
         print("Unsupported network id (Use 0 to 4).")
@@ -484,7 +551,8 @@ def my_load_model(fname,compile=True):
             custom_objects={'loss': loss,
                             'paccuracy':paccuracy,
                             'sloss':sloss,
-                            'clipped_relu':nnue.clipped_relu})
+                            'clipped_relu':nnue.clipped_relu,
+                            'DenseLayerForSparse':nnue.DenseLayerForSparse})
 
 class NNet():
     def __init__(self,args):
@@ -549,7 +617,11 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
         if HEAD_TYPE == 3:
-            ipln = np.zeros(shape=(N,2*CHANNELS,BOARDY,BOARDX),dtype=np.int8)
+            S = 0
+            for i in range(args.cores):
+                S = S + res[i][0].shape[1]
+            iplanes = np.zeros(shape=(2,S,2), dtype=np.uint)
+            values = np.ones(shape=(2,S), dtype=np.int8)
         else:
             ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
@@ -571,16 +643,19 @@ class NNet():
             y = [oval, opol, osco]
         else:
             oval = np.zeros(shape=(N,),dtype=np.float32)
-            ikin = np.zeros(shape=(N,2),dtype=np.int8)
-            x1 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.int8)
-            x2 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.int8)
-            x = [x1, x2]
             y = [oval]
 
         #merge results from different cores
+        cidx = 0
         for i in range(args.cores):
-            ipln[slices[i],:,:,:] = res[i][0]
-            ores[slices[i]] = res[i][1]
+            if HEAD_TYPE == 3:
+                S = res[i][0].shape[1]
+                iplanes[:,cidx:(cidx + S),:] = res[i][0]
+                cidx = cidx + S
+                ores[slices[i]] = res[i][1]
+            else:
+                ipln[slices[i],:,:,:] = res[i][0]
+                ores[slices[i]] = res[i][1]
             if HEAD_TYPE == 0:
                 oval[slices[i],:] = res[i][2]
                 opol[slices[i],:] = res[i][3]
@@ -593,25 +668,13 @@ class NNet():
                 osco[slices[i],:] = res[i][4]
             else:
                 oval[slices[i]] = res[i][2]
-                ikin[slices[i],:] = res[i][3]
 
         #construct sparse matrix
         if HEAD_TYPE == 3:
-            WIDTH=CHANNELS
-            for id in range(N):
-                if NNUE_KINDICES == 1:
-                    x1[id,:,:,:] = ipln[id,:WIDTH,:,:]
-                    x2[id,:,:,:] = ipln[id,WIDTH:,:,:]
-                else:
-                    k1 = ikin[id][0] * CHANNELS
-                    k2 = ikin[id][1] * CHANNELS
-                    x1[id,k1:k1+CHANNELS,:,:] = ipln[id,:CHANNELS,:,:]
-                    x2[id,k2:k2+CHANNELS,:,:] = ipln[id,WIDTH:(WIDTH+CHANNELS),:,:]
-                    if NNUE_FACTORIZER != 0:
-                        k1 = NNUE_KINDICES * CHANNELS
-                        x1[id,k1:k1+CHANNELS,:,:] = ipln[id,:CHANNELS,:,:]
-                        x2[id,k1:k1+CHANNELS,:,:] = ipln[id,WIDTH:(WIDTH+CHANNELS),:,:]
-                        k1 += CHANNELS
+            dense_shape = (N,NNUE_CHANNELS*BOARDY*BOARDX)
+            x1 = tf.sparse.reorder(tf.SparseTensor(iplanes[0,:,:],values[0,:],dense_shape))
+            x2 = tf.sparse.reorder(tf.SparseTensor(iplanes[1,:,:],values[1,:],dense_shape))
+            x = [x1, x2]
 
         #sampe weight
         vweights = None
@@ -633,6 +696,12 @@ class NNet():
                       batch_size=BATCH_SIZE,
                       sample_weight=[vweights, pweights],
                       validation_split=args.vald_split,
+                      initial_epoch=initial_epoch,
+                      epochs=epochs,
+                      callbacks=[tensorboard_callback])
+            elif HEAD_TYPE == 3:
+                self.model[i].fit(x = x, y = y,
+                      batch_size=BATCH_SIZE,
                       initial_epoch=initial_epoch,
                       epochs=epochs,
                       callbacks=[tensorboard_callback])
@@ -734,7 +803,7 @@ def get_chunk(myNet,args,myEpd,start):
                     #multiprocess epd
                     nlen = N//args.cores
                     slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
-                    res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
+                    res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl],sl.start) for sl in slices )
 
                     examples = []
                     yield N,res
