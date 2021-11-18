@@ -119,7 +119,7 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix + 12, r,  f] = 1.0
+            iplanes[ix + 12, r,  f] = 1
 
         squares = chess.SquareSet(abb)
         for sq in squares:
@@ -127,7 +127,7 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix, r,  f] = 1.0
+            iplanes[ix, r,  f] = 1
     else:
         squares = chess.SquareSet(bb)
         for sq in squares:
@@ -135,36 +135,36 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix, r,  f] = 1.0
+            iplanes[ix, r,  f] = 1
 
             if HEAD_TYPE == 3 and NNUE_FACTORIZER_EXTRA != 0 and ix < 6:
-                iplanes[CHANNELS + 0, ix, f] += 1.0                 #rows
-                iplanes[CHANNELS + 1, ix, r] += 1.0                 #columns
-                iplanes[CHANNELS + 0, 6, ix] += 1.0                 #ring-1 (material)
+                iplanes[CHANNELS + 0, ix, f] += 1                 #rows
+                iplanes[CHANNELS + 1, ix, r] += 1                 #columns
+                iplanes[CHANNELS + 0, 6, ix] += 1                 #ring-1 (material)
                 if r >= 1 and r < 7 and f >= 1 and f < 7:
-                    iplanes[CHANNELS + 0, 7, ix] += 1.0             #ring-2
-                if r >= 2 and r < 6 and f >= 2 and f < 6:
-                    iplanes[CHANNELS + 1, 6, ix] += 1.0             #ring-3
-                if r >= 3 and r < 5 and f >= 3 and f < 5:
-                    iplanes[CHANNELS + 1, 7, ix] += 1.0             #ring-4 (center)
-                if (r + f) % 2 == 0:
+                    iplanes[CHANNELS + 0, 7, ix] += 1             #ring-2
+                    if r >= 2 and r < 6 and f >= 2 and f < 6:
+                        iplanes[CHANNELS + 1, 6, ix] += 1         #ring-3
+                        if r >= 3 and r < 5 and f >= 3 and f < 5:
+                            iplanes[CHANNELS + 1, 7, ix] += 1     #ring-4 (center)
+                if ((r + f) & 1) == 0:
                     if ix == 3:
-                        iplanes[CHANNELS + 0, 6, 6] += 1.0          #bishops on dark-square
+                        iplanes[CHANNELS + 0, 6, 6] += 1          #bishops on dark-square
                     if ix == 4:
-                        iplanes[CHANNELS + 0, 6, 7] += 1.0          #knights on dark-square
+                        iplanes[CHANNELS + 0, 6, 7] += 1          #knights on dark-square
                     if ix == 5:
-                        iplanes[CHANNELS + 0, 7, 6] += 1.0          #pawns on dark-square
+                        iplanes[CHANNELS + 0, 7, 6] += 1          #pawns on dark-square
                         if r >= 2 and r < 6 and f >= 2 and f < 6:
-                            iplanes[CHANNELS + 0, 7, 7] += 1.0      #center-pawns on dark-square
+                            iplanes[CHANNELS + 0, 7, 7] += 1      #center-pawns on dark-square
                 if ix == 3:
                     if r == f:
-                        iplanes[CHANNELS + 1, 6, 6] += 1.0          #bishop on a1-h8 diagonal
+                        iplanes[CHANNELS + 1, 6, 6] += 1          #bishop on a1-h8 diagonal
                     if r + f == 7:
-                        iplanes[CHANNELS + 1, 6, 7] += 1.0          #bishop on h1-a8 diagonal
+                        iplanes[CHANNELS + 1, 6, 7] += 1          #bishop on h1-a8 diagonal
                     if r == f + 1 or r + 1 == f:
-                        iplanes[CHANNELS + 1, 7, 6] += 1.0          #bishop on two diagonals closest to a1-h8
+                        iplanes[CHANNELS + 1, 7, 6] += 1          #bishop on two diagonals closest to a1-h8
                     if r + f == 6 or r + f == 8:
-                        iplanes[CHANNELS + 1, 7, 7] += 1.0          #bishop on two diagonals closest to h1-a8
+                        iplanes[CHANNELS + 1, 7, 7] += 1          #bishop on two diagonals closest to h1-a8
 
 
 def fill_planes_(iplanes, b, side, flip_rank, flip_file):
@@ -215,20 +215,20 @@ def fill_planes(iplanes, b):
         r = chess.square_rank(b.ep_square)
         if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
-        iplanes[CHANNELS - 8, r, f] = 1.0
+        iplanes[CHANNELS - 8, r, f] = 1
 
     if b.has_queenside_castling_rights(b.turn):
-        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1.0
+        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1
     if b.has_kingside_castling_rights(b.turn):
-        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1.0
+        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1
     if b.has_queenside_castling_rights(not b.turn):
-        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1.0
+        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1
     if b.has_kingside_castling_rights(not b.turn):
-        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1.0
+        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1
 
     iplanes[CHANNELS - 3, :, :] = b.fullmove_number / 200.0
     iplanes[CHANNELS - 2, :, :] = b.halfmove_clock / 100.0
-    iplanes[CHANNELS - 1, :, :] = 1.0
+    iplanes[CHANNELS - 1, :, :] = 1
 
 def fill_planes_nnue_(iplanes, ikings, b, side):
 
@@ -266,9 +266,9 @@ def fill_planes_fen(iplanes, fen, player):
             idx = PIECE_MAP.find(c)
             if idx != -1:
                 if not flip_rank:
-                    iplanes[idx, r,  f] = 1.0
+                    iplanes[idx, r,  f] = 1
                 else:
-                    iplanes[(idx^1), RANK_U - r,  f] = 1.0
+                    iplanes[(idx^1), RANK_U - r,  f] = 1
                 if c == 'K':
                     kf = f
                 cnt = cnt + 1
@@ -324,28 +324,28 @@ def fill_planes_fen(iplanes, fen, player):
         r = epstr[1] - '1'
         if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
-        iplanes[CHANNELS - 8, r, f] = 1.0
+        iplanes[CHANNELS - 8, r, f] = 1
 
     castr = words[1]
     if castr.find('Q' if player == 0 else 'q') != -1:
-        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1.0
+        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1
     if castr.find('K' if player == 0 else 'k') != -1:
-        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1.0
+        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1
     if castr.find('q' if player == 0 else 'Q') != -1:
-        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1.0
+        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1
     if castr.find('k' if player == 0 else 'K') != -1:
-        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1.0
+        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1
 
     iplanes[CHANNELS - 3, :, :] = float(words[4]) / 200.0
     iplanes[CHANNELS - 2, :, :] = float(words[3]) / 100.0
-    iplanes[CHANNELS - 1, :, :] = 1.0
+    iplanes[CHANNELS - 1, :, :] = 1
 
 def fill_examples(examples):
 
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(N,2*(CHANNELS + NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.float32)
+        iplanes = np.zeros(shape=(N,2*(CHANNELS + NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
@@ -364,7 +364,7 @@ def fill_examples(examples):
         ret = [iplanes, oresult, ovalue, opolicy, oscore]
     else:
         ovalue = np.zeros(shape=(N,),dtype=np.float32)
-        ikings = np.zeros(shape=(N,2),dtype=np.int)
+        ikings = np.zeros(shape=(N,2),dtype=np.int8)
         ret = [iplanes, oresult, ovalue, ikings]
 
     #parse each example
@@ -579,7 +579,7 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
         if HEAD_TYPE == 3:
-            ipln = np.zeros(shape=(N,2*(CHANNELS+NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.float32)
+            ipln = np.zeros(shape=(N,2*(CHANNELS+NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.int8)
         else:
             ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
@@ -601,9 +601,9 @@ class NNet():
             y = [oval, opol, osco]
         else:
             oval = np.zeros(shape=(N,),dtype=np.float32)
-            ikin = np.zeros(shape=(N,2),dtype=np.int)
-            x1 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.float32)
-            x2 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.float32)
+            ikin = np.zeros(shape=(N,2),dtype=np.int8)
+            x1 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.int8)
+            x2 = np.zeros(shape=(N,NNUE_CHANNELS,BOARDY,BOARDX),dtype=np.int8)
             x = [x1, x2]
             y = [oval]
 
@@ -768,7 +768,7 @@ def get_chunk(myNet,args,myEpd,start):
                 N = len(examples)
                 if N > 0:
                     #multiprocess epd
-                    nlen = N / args.cores
+                    nlen = N//args.cores
                     slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
                     res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
