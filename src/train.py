@@ -243,7 +243,7 @@ def fill_planes_nnue_(iplanes, ikings, b, side):
     r = chess.square_rank(ksq)
     if flip_rank: r = RANK_U - r
     if flip_file: f = FILE_U - f
-    kindex = r * BOARDX / 2 + (f - BOARDX / 2)
+    kindex = r * BOARDX // 2 + (f - BOARDX // 2)
     ikings[0] = NNUE_KINDEX_TAB[NNUE_KIDX][kindex]
 
 def fill_planes_nnue(iplanes, ikings, b):
@@ -575,7 +575,7 @@ class NNet():
     def train(self,N,res,local_steps,args):
 
         # generate X and Y
-        nlen = N / args.cores
+        nlen = N // args.cores
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
         if HEAD_TYPE == 3:
@@ -753,7 +753,7 @@ def get_chunk(myNet,args,myEpd,start):
 
             #train network
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
-                chunk = (count + EPD_CHUNK_SIZE - 1) / EPD_CHUNK_SIZE
+                chunk = (count + EPD_CHUNK_SIZE - 1) // EPD_CHUNK_SIZE
                 end_t = time.time()
 
                 #make sure size is divisible by BATCH_SIZE
@@ -767,7 +767,7 @@ def get_chunk(myNet,args,myEpd,start):
                 N = len(examples)
                 if N > 0:
                     #multiprocess epd
-                    nlen = N / args.cores
+                    nlen = N//args.cores
                     slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
                     res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl]) for sl in slices )
 
