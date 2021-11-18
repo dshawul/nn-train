@@ -345,7 +345,7 @@ def fill_examples(examples):
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.float32)
+        iplanes = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
@@ -364,7 +364,7 @@ def fill_examples(examples):
         ret = [iplanes, oresult, ovalue, opolicy, oscore]
     else:
         ovalue = np.zeros(shape=(N,),dtype=np.float32)
-        ikings = np.zeros(shape=(N,2),dtype=np.int)
+        ikings = np.zeros(shape=(N,2),dtype=np.int8)
         ret = [iplanes, oresult, ovalue, ikings]
 
     #parse each example
@@ -579,7 +579,7 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
         if HEAD_TYPE == 3:
-            ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.float32)
+            ipln = np.zeros(shape=(N,2*BOARDY,BOARDX,CHANNELS+NNUE_FACTORIZER_EXTRA),dtype=np.int8)
         else:
             ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
@@ -602,8 +602,8 @@ class NNet():
         else:
             oval = np.zeros(shape=(N,),dtype=np.float32)
             ikin = np.zeros(shape=(N,2),dtype=np.int)
-            x1 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.float32)
-            x2 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.float32)
+            x1 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.int8)
+            x2 = np.zeros(shape=(N,BOARDY,BOARDX,NNUE_CHANNELS),dtype=np.int8)
             x = [x1, x2]
             y = [oval]
 
