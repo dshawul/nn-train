@@ -732,7 +732,7 @@ class NNet():
 
 def get_chunk(myNet,args,myEpd,start):
 
-    with (open(myEpd) if not args.gzip else gzip.open(myEpd)) as file:
+    with (open(myEpd) if not args.gzip else gzip.open(myEpd,mode='rt')) as file:
         count = 0
 
         examples = []
