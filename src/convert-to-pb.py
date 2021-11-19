@@ -103,6 +103,14 @@ def save_weights(m,name):
 
                     plt.figure(figsize=(20, 10))
 
+                    #no factorizer
+                    for i in range(NNUE_KINDICES):
+                        for j in range(12):
+                            for k in range(64):
+                                wm[i*12*64+j*64+k,:] =  wi[i*12*64+j*64+k,:]
+                    plt.subplot(1,2,1)
+                    plot(wm,'plain')
+
                     #k-psqt factorizer
                     for i in range(NNUE_KINDICES):
                         for j in range(12):
@@ -110,8 +118,9 @@ def save_weights(m,name):
                                 wm[i*12*64+j*64+k,:] =  \
                                         wi[i*12*64+j*64+k,:] + \
                                         wi[NNUE_KINDICES*12*64+j*64+k,:]
-                    plt.subplot(1,2,1)
+                    plt.subplot(1,2,2)
                     plot(wm,'kpsqt')
+                    
                     has_plot = True
 
                 if has_plot:
