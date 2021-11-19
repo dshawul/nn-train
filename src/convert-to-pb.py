@@ -17,33 +17,33 @@ except:
 SAVE_BIN = False
 VERSION = 0
 
-def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
-    """
-    Freezes the state of a session into a pruned computation graph.
+def freeze_model(model):
+    from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
-    Creates a new computation graph where variable nodes are replaced by
-    constants taking their current value in the session. The new graph will be
-    pruned so subgraphs that are not necessary to compute the requested
-    outputs are removed.
-    @param session The TensorFlow session to be frozen.
-    @param keep_var_names A list of variable names that should not be frozen,
-                          or None to freeze all the variables in the graph.
-    @param output_names Names of the relevant graph outputs.
-    @param clear_devices Remove the device directives from the graph for better portability.
-    @return The frozen graph definition.
-    """
-    graph = session.graph
-    with graph.as_default():
-        freeze_var_names = list(set(v.op.name for v in tf.global_variables()).difference(keep_var_names or []))
-        output_names = output_names or []
-        output_names += [v.op.name for v in tf.global_variables()]
-        input_graph_def = graph.as_graph_def()
-        if clear_devices:
-            for node in input_graph_def.node:
-                node.device = ""
-        frozen_graph = tf.graph_util.convert_variables_to_constants(session, input_graph_def,
-                                                      output_names, freeze_var_names)
-        return frozen_graph
+    # Convert Keras model to ConcreteFunction
+    full_model = tf.function(lambda x: model(x))
+    input_types = []
+    for inp in model.inputs:
+        input_types.append(inp.type_spec)
+    full_model = full_model.get_concrete_function(input_types)
+
+    # Get frozen ConcreteFunction
+    frozen_func = convert_variables_to_constants_v2(full_model)
+    frozen_func.graph.as_graph_def()
+
+    layers = [op.name for op in frozen_func.graph.get_operations()]
+    print("-" * 50)
+    print("Frozen model layers: ")
+    for layer in layers:
+        print(layer)
+
+    print("-" * 50)
+    print("Frozen model inputs: ")
+    print(frozen_func.inputs)
+    print("Frozen model outputs: ")
+    print(frozen_func.outputs)
+
+    return frozen_func.graph
 
 def copy_weights(m1,m2):
     """
@@ -138,7 +138,6 @@ def convertGraph(modelPath, inferPath, outdir, name):
     from tensorflow.python.framework import graph_io
 
     tf.keras.backend.set_learning_phase(0)
-    sess = tf.keras.backend.get_session()
 
     #defaults
     if outdir == None:
@@ -161,7 +160,6 @@ def convertGraph(modelPath, inferPath, outdir, name):
         net_model.save(modelPath, include_optimizer=False, save_format='h5')
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(0)
-        sess = tf.keras.backend.get_session()
         net_model = my_load_model(modelPath)
     else:
         net_model = my_load_model(modelPath)
@@ -172,12 +170,13 @@ def convertGraph(modelPath, inferPath, outdir, name):
         save_weights(net_model, fpath)
         print('Raw weights: ', fpath)
 
-    #freeze graph
-    output_names = [out.op.name for out in net_model.outputs]
-    constant_graph = freeze_session(sess, output_names=output_names)
+    constant_graph = freeze_model(net_model)
 
-    # Write the graph in binary .pb file
-    graph_io.write_graph(constant_graph, outdir, name + ".pb", as_text=False)
+    # Save frozen graph from frozen ConcreteFunction to hard drive
+    tf.io.write_graph(graph_or_graph_def=constant_graph,
+                      logdir=outdir,
+                      name=name+".pb",
+                      as_text=False)
     print('Frozen graph: ', os.path.join(outdir, name + ".pb"))
 
 if __name__ == '__main__':
