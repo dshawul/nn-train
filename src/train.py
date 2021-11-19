@@ -801,7 +801,7 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
     s = time.time()
     N,res = next(gen)
     e = time.time()
-    print("Average chunk prep time ", int(e - s), "sec")
+    print("Average chunk prep time ", round(e - s, 2), "sec")
 
     queue = mp.Queue()
     p1 = MyProcess(gen,queue)
@@ -825,7 +825,7 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
             myNet.save_checkpoint(chunk, args, False)
 
         e = time.time()
-        print("Total time ", int(e - s), "sec")
+        print("Total time ", round(e - s, 2), "sec")
 
         p1.join(timeout=0)
         if not p1.is_alive():
@@ -922,7 +922,7 @@ def main(argv):
     start_t = time.time()
     myNet.load_checkpoint(chunk, args)
     end_t = time.time()
-    print("Time", int(end_t - start_t), "sec")
+    print("Time", round(end_t - start_t, 2), "sec")
 
     if args.rand:
         myNet.save_checkpoint(chunk, args)
