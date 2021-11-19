@@ -112,44 +112,6 @@ def save_weights(m,name):
                                         wi[NNUE_KINDICES*12*64+j*64+k,:]
                     plt.subplot(1,2,1)
                     plot(wm,'kpsqt')
-
-                    #file,rank,and 4 rings factorizors
-                    ch = (NNUE_KINDICES+1)*12
-                    for k in range(64):
-                        f = k % 8
-                        r = k / 8
-                        for i in range(NNUE_KINDICES):
-                            for j in range(6):
-                                wm[i*12*64+j*64+k,:] += \
-                                    win[ch+0,j*8+f,:] + \
-                                    win[ch+1,j*8+r,:] + \
-                                    win[ch+0,6*8+j,:]
-                                if r >= 1 and r < 7 and f >= 1 and f < 7:
-                                    wm[i*12*64+j*64+k,:] += win[ch+0,7*8+j,:]
-                                if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                    wm[i*12*64+j*64+k,:] += win[ch+1,6*8+j,:]
-                                if r >= 3 and r < 5 and f >= 3 and f < 5:
-                                    wm[i*12*64+j*64+k,:] += win[ch+1,7*8+j,:]
-                                if (r + f) % 2 == 0:
-                                    if j == 3:
-                                        wm[i*12*64+j*64+k,:] += win[ch+0,6*8+6,:]
-                                    if j == 4:
-                                        wm[i*12*64+j*64+k,:] += win[ch+0,6*8+7,:]
-                                    if j == 5:
-                                        wm[i*12*64+j*64+k,:] += win[ch+0,7*8+6,:]
-                                        if r >= 2 and r < 6 and f >= 2 and f < 6:
-                                            wm[i*12*64+j*64+k,:] += win[ch+0,7*8+7,:]
-                                if j == 3:
-                                    if r == f:
-                                        wm[i*12*64+j*64+k,:] += win[ch+1,6*8+6,:]
-                                    if r + f == 7:
-                                        wm[i*12*64+j*64+k,:] += win[ch+1,6*8+7,:]
-                                    if r == f + 1 or r + 1 == f:
-                                        wm[i*12*64+j*64+k,:] += win[ch+1,7*8+6,:]
-                                    if r + f == 6 or r + f == 8:
-                                        wm[i*12*64+j*64+k,:] += win[ch+1,7*8+7,:]
-                    plt.subplot(1,2,2)
-                    plot(wm,'frcb',2)
                     has_plot = True
 
                 if has_plot:

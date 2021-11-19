@@ -38,9 +38,8 @@ MAX_QUEUE = 1
 
 #NNUE
 NNUE_KIDX = 4
-NNUE_FACTORIZER_EXTRA = 2
 NNUE_KINDICES = (1 << NNUE_KIDX)
-NNUE_FACTORIZER = (12 if NNUE_KIDX > 0 else 0) + NNUE_FACTORIZER_EXTRA
+NNUE_FACTORIZER = (12 if NNUE_KIDX > 0 else 0)
 NNUE_CHANNELS = NNUE_KINDICES*12 + NNUE_FACTORIZER  # NNUE_CHANNELS used during training
                                                     # CHANNELS=12 is used during data processing
 
@@ -137,35 +136,6 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             if flip_file: f = FILE_U - f
             iplanes[ix, r,  f] = 1
 
-            if HEAD_TYPE == 3 and NNUE_FACTORIZER_EXTRA != 0 and ix < 6:
-                iplanes[CHANNELS + 0, ix, f] += 1                 #rows
-                iplanes[CHANNELS + 1, ix, r] += 1                 #columns
-                iplanes[CHANNELS + 0, 6, ix] += 1                 #ring-1 (material)
-                if r >= 1 and r < 7 and f >= 1 and f < 7:
-                    iplanes[CHANNELS + 0, 7, ix] += 1             #ring-2
-                    if r >= 2 and r < 6 and f >= 2 and f < 6:
-                        iplanes[CHANNELS + 1, 6, ix] += 1         #ring-3
-                        if r >= 3 and r < 5 and f >= 3 and f < 5:
-                            iplanes[CHANNELS + 1, 7, ix] += 1     #ring-4 (center)
-                if ((r + f) & 1) == 0:
-                    if ix == 3:
-                        iplanes[CHANNELS + 0, 6, 6] += 1          #bishops on dark-square
-                    if ix == 4:
-                        iplanes[CHANNELS + 0, 6, 7] += 1          #knights on dark-square
-                    if ix == 5:
-                        iplanes[CHANNELS + 0, 7, 6] += 1          #pawns on dark-square
-                        if r >= 2 and r < 6 and f >= 2 and f < 6:
-                            iplanes[CHANNELS + 0, 7, 7] += 1      #center-pawns on dark-square
-                if ix == 3:
-                    if r == f:
-                        iplanes[CHANNELS + 1, 6, 6] += 1          #bishop on a1-h8 diagonal
-                    if r + f == 7:
-                        iplanes[CHANNELS + 1, 6, 7] += 1          #bishop on h1-a8 diagonal
-                    if r == f + 1 or r + 1 == f:
-                        iplanes[CHANNELS + 1, 7, 6] += 1          #bishop on two diagonals closest to a1-h8
-                    if r + f == 6 or r + f == 8:
-                        iplanes[CHANNELS + 1, 7, 7] += 1          #bishop on two diagonals closest to h1-a8
-
 
 def fill_planes_(iplanes, b, side, flip_rank, flip_file):
     """ Compute piece and attack planes for all pieces"""
@@ -249,8 +219,8 @@ def fill_planes_nnue_(iplanes, ikings, b, side):
 def fill_planes_nnue(iplanes, ikings, b):
     """ Compute input planes for NNUE training """
 
-    fill_planes_nnue_(iplanes[:(CHANNELS+NNUE_FACTORIZER_EXTRA),:,:], ikings[:1], b, b.turn)
-    fill_planes_nnue_(iplanes[(CHANNELS+NNUE_FACTORIZER_EXTRA):,:,:], ikings[1:], b, not b.turn)
+    fill_planes_nnue_(iplanes[:CHANNELS,:,:], ikings[:1], b, b.turn)
+    fill_planes_nnue_(iplanes[CHANNELS:,:,:], ikings[1:], b, not b.turn)
 
 def fill_planes_fen(iplanes, fen, player):
 
@@ -345,7 +315,7 @@ def fill_examples(examples):
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(N,2*(CHANNELS + NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.int8)
+        iplanes = np.zeros(shape=(N,2*CHANNELS,BOARDY,BOARDX),dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
@@ -579,7 +549,7 @@ class NNet():
         slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
 
         if HEAD_TYPE == 3:
-            ipln = np.zeros(shape=(N,2*(CHANNELS+NNUE_FACTORIZER_EXTRA),BOARDY,BOARDX),dtype=np.int8)
+            ipln = np.zeros(shape=(N,2*CHANNELS,BOARDY,BOARDX),dtype=np.int8)
         else:
             ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
         ores = np.zeros(shape=(N,),dtype=np.int)
@@ -627,7 +597,7 @@ class NNet():
 
         #construct sparse matrix
         if HEAD_TYPE == 3:
-            WIDTH=(CHANNELS+NNUE_FACTORIZER_EXTRA)
+            WIDTH=CHANNELS
             for id in range(N):
                 if NNUE_KINDICES == 1:
                     x1[id,:,:,:] = ipln[id,:WIDTH,:,:]
@@ -642,12 +612,6 @@ class NNet():
                         x1[id,k1:k1+CHANNELS,:,:] = ipln[id,:CHANNELS,:,:]
                         x2[id,k1:k1+CHANNELS,:,:] = ipln[id,WIDTH:(WIDTH+CHANNELS),:,:]
                         k1 += CHANNELS
-                        if NNUE_FACTORIZER_EXTRA != 0:
-                            x1[id,k1:k1+NNUE_FACTORIZER_EXTRA,:,:] = \
-                                ipln[id,CHANNELS:WIDTH,:,:]
-                            x2[id,k1:k1+NNUE_FACTORIZER_EXTRA,:,:] = \
-                                ipln[id,(WIDTH+CHANNELS):,:,:]
-                            k1 += NNUE_FACTORIZER_EXTRA
 
         #sampe weight
         vweights = None
