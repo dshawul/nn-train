@@ -536,9 +536,9 @@ class NNet():
 
     def compile_model(self,mdx,args):
         if args.opt == 0:
-            opt = tf.keras.optimizers.SGD(lr=args.lr, momentum=0.9, nesterov=True)
+            opt = tf.keras.optimizers.SGD(learning_rate=args.lr, momentum=0.9, nesterov=True)
         else:
-            opt = tf.keras.optimizers.Adam(lr=args.lr)
+            opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
 
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
