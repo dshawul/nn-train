@@ -74,7 +74,7 @@ def plot(wm,name="",scale=8):
                 for m in range(84):
                     b += wm[i*12*64+j*64+k,m+172]*scale
                 r, g, b = r/4, g/4, b/4
-                wc[(NNUE_KINDICES-1-i)*8 + (7-k/8), (j*8)+k%8, :] = [r,g,b]
+                wc[(NNUE_KINDICES-1-i)*8 + (7-k//8), (j*8)+k%8, :] = [r,g,b]
                 # print(r,g,b)
 
     im = plt.imshow(wc, interpolation='none')
