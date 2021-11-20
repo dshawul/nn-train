@@ -4,7 +4,7 @@ import argparse
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
-from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS
+from train import my_load_model, NNUE_KINDICES, NNUE_FEATURES
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -96,8 +96,7 @@ def save_weights(m,name):
                 wm = wi
                 has_plot = False
                 #add factorizer weights
-                if wi.shape == (64*NNUE_CHANNELS, 256) and NNUE_KINDICES > 1:
-                    win = wi.reshape(NNUE_CHANNELS, 64, 256)
+                if wi.shape == (NNUE_FEATURES, 256) and NNUE_KINDICES > 1:
                     wm = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
 
@@ -108,19 +107,32 @@ def save_weights(m,name):
                         for j in range(12):
                             for k in range(64):
                                 wm[i*12*64+j*64+k,:] =  wi[i*12*64+j*64+k,:]
-                    plt.subplot(1,2,1)
+                    plt.subplot(1,3,1)
                     plot(wm,'plain')
 
                     #k-psqt factorizer
                     for i in range(NNUE_KINDICES):
                         for j in range(12):
                             for k in range(64):
-                                wm[i*12*64+j*64+k,:] =  \
-                                        wi[i*12*64+j*64+k,:] + \
-                                        wi[NNUE_KINDICES*12*64+j*64+k,:]
-                    plt.subplot(1,2,2)
+                                wm[i*12*64+j*64+k,:] += wi[NNUE_KINDICES*12*64+j*64+k,:]
+                    plt.subplot(1,3,2)
                     plot(wm,'kpsqt')
-                    
+
+                    #material count and light/dark bishops factorizer
+                    for i in range(NNUE_KINDICES):
+                        for j in range(1,6):
+                            for k in range(64):
+                                wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+j]
+                                if j == 3:
+                                    f = k % 8
+                                    r = k // 8
+                                    if((r + f) & 1) == 1:
+                                        wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+6]
+                                    else:
+                                        wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+7]
+                    plt.subplot(1,3,3)
+                    plot(wm,'material')
+
                     has_plot = True
 
                 if has_plot:

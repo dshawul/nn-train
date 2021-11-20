@@ -18,8 +18,8 @@ def clipped_relu(x):
     return activations.relu(x, max_value=1.0)
 
 class DenseLayerForSparse(layers.Layer):
-    def __init__(self, num_units, input_size, activation=clipped_relu, **kwargs):
-        super(DenseLayerForSparse, self).__init__()
+    def __init__(self, num_units, input_size, activation=clipped_relu, name=None,**kwargs):
+        super(DenseLayerForSparse, self).__init__(name=name)
         self.num_units = num_units
         self.input_size = input_size
         self.activation = activations.get(activation)
@@ -63,7 +63,7 @@ def input_head(main_input_shape):
     main_input = Input(shape=main_input_shape,sparse=True)
     x = main_input
 
-    x = DenseLayerForSparse(256, main_input_shape[0])(x)
+    x = DenseLayerForSparse(256, main_input_shape[0], name="sparse_input_dense")(x)
 
     model = Model(inputs=[main_input], outputs=[x])
 
