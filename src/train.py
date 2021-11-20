@@ -959,10 +959,10 @@ def main(argv):
     print("Time", round(end_t - start_t, 2), "sec")
 
     if args.rand:
-        myNet.save_checkpoint(chunk, args)
+        myNet.save_checkpoint(chunk, args, True)
     else:
         if not exists:
-            myNet.save_checkpoint(chunk, args)
+            myNet.save_checkpoint(chunk, args, True)
         start = chunk * EPD_CHUNK_SIZE + 1
         train_epd(myNet, args, args.epd, chunk, start)
 
