@@ -373,9 +373,7 @@ def fill_examples(examples):
         words = line.strip().split()
 
         #fen string
-        fen = ''
-        for i in range(0, 6):
-            fen = fen + words[i] + ' '
+        fen = " ".join(words[0:6])
 
         #player
         if words[1] == 'b':
@@ -384,10 +382,9 @@ def fill_examples(examples):
             player = 0
 
         #result
-        svalue = words[6]
-        if svalue == '1-0':
+        if words[6] == '1-0':
             result = 0
-        elif svalue == '0-1':
+        elif words[6] == '0-1':
             result = 2
         else:
             result = 1
