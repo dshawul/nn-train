@@ -40,8 +40,9 @@ MAX_QUEUE = 1
 NNUE_KIDX = 4
 NNUE_KINDICES = (1 << NNUE_KIDX)
 NNUE_FACTORIZER = (12 if NNUE_KIDX > 0 else 0)
+NNUE_CHANNELS = (NNUE_KINDICES * 12 + NNUE_FACTORIZER)
 NNUE_FEATURES_EXTRA = 8
-NNUE_FEATURES = (NNUE_KINDICES * 12 + NNUE_FACTORIZER) * BOARDY * BOARDX + NNUE_FEATURES_EXTRA
+NNUE_FEATURES = NNUE_CHANNELS * BOARDY * BOARDX + NNUE_FEATURES_EXTRA
 
 NNUE_KINDEX_TAB = [
    [
@@ -118,7 +119,7 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix + 12, r,  f] = 1
+            iplanes[r,  f, ix + 12] = 1
 
         squares = chess.SquareSet(abb)
         for sq in squares:
@@ -126,7 +127,7 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix, r,  f] = 1
+            iplanes[r,  f, ix] = 1
     else:
         squares = chess.SquareSet(bb)
         for sq in squares:
@@ -134,7 +135,7 @@ def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
             r = chess.square_rank(sq)
             if flip_rank: r = RANK_U - r
             if flip_file: f = FILE_U - f
-            iplanes[ix, r,  f] = 1
+            iplanes[r,  f, ix] = 1
 
 def fill_planes_(iplanes, b, side, flip_rank, flip_file):
     """ Compute piece and attack planes for all pieces"""
@@ -185,20 +186,20 @@ def fill_planes(iplanes, b):
         r = chess.square_rank(b.ep_square)
         if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
-        iplanes[CHANNELS - 8, r, f] = 1
+        iplanes[r, f, CHANNELS - 8] = 1
 
     if b.has_queenside_castling_rights(b.turn):
-        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1
+        iplanes[:, :, CHANNELS - (6 if flip_file else 7)] = 1
     if b.has_kingside_castling_rights(b.turn):
-        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1
+        iplanes[:, :, CHANNELS - (7 if flip_file else 6)] = 1
     if b.has_queenside_castling_rights(not b.turn):
-        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1
+        iplanes[:, :, CHANNELS - (4 if flip_file else 5)] = 1
     if b.has_kingside_castling_rights(not b.turn):
-        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1
+        iplanes[:, :, CHANNELS - (5 if flip_file else 4)] = 1
 
-    iplanes[CHANNELS - 3, :, :] = b.fullmove_number / 200.0
-    iplanes[CHANNELS - 2, :, :] = b.halfmove_clock / 100.0
-    iplanes[CHANNELS - 1, :, :] = 1
+    iplanes[:, :, CHANNELS - 3] = b.fullmove_number / 200.0
+    iplanes[:, :, CHANNELS - 2] = b.halfmove_clock / 100.0
+    iplanes[:, :, CHANNELS - 1] = 1
 
 #NNUE
 
@@ -210,13 +211,13 @@ def fill_piece_nnue(iplanes, cidx, kidx, ix, bb, flip_rank, flip_file):
         r = chess.square_rank(sq)
         if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
-        off = ix * 64 + r * 8 + f
+        off = (r * 8 + f) * NNUE_CHANNELS + ix
 
-        iplanes[cidx,1] = kidx * 768 + off
+        iplanes[cidx,1] = kidx * 12 + off
         cidx = cidx + 1
 
         if NNUE_FACTORIZER > 0:
-            iplanes[cidx,1] = NNUE_KINDICES * 768 + off
+            iplanes[cidx,1] = NNUE_KINDICES * 12 + off
             cidx = cidx + 1
 
     return cidx
@@ -262,9 +263,14 @@ def fill_planes_nnue_(iplanes, ivalues, cidx, pid, kidx, b, side, flip_rank, fli
     #extra factorizers
     if NNUE_FEATURES_EXTRA > 0:
 
-        off = (NNUE_KINDICES + 1) * 768
+        off = NNUE_CHANNELS * 64
 
         ## Material count for side to move ##
+
+        #king
+        iplanes[cidx,1] = off + 0
+        ivalues[cidx] = 1
+        cidx = cidx + 1
 
         #queen
         iplanes[cidx,1] = off + 1
@@ -342,9 +348,9 @@ def fill_planes_fen(iplanes, fen, player):
             idx = PIECE_MAP.find(c)
             if idx != -1:
                 if not flip_rank:
-                    iplanes[idx, r,  f] = 1
+                    iplanes[r,  f, idx] = 1
                 else:
-                    iplanes[(idx^1), RANK_U - r,  f] = 1
+                    iplanes[RANK_U - r,  f, (idx^1)] = 1
                 if c == 'K':
                     kf = f
                 cnt = cnt + 1
@@ -364,9 +370,9 @@ def fill_planes_fen(iplanes, fen, player):
 
     if flip_file:
         for f in range(0, FILE_U + 1, 1):
-            temp = iplanes[:, :, FILE_U - f]
-            iplanes[:, :, FILE_U - f] = iplanes[:, :, f]
-            iplanes[:, :, f] = temp
+            temp = iplanes[:, FILE_U - f, :]
+            iplanes[:, FILE_U - f, :] = iplanes[:, f, :]
+            iplanes[:, f, :] = temp
 
     #holdings
     if fen[cnt - 1] == '[':
@@ -388,9 +394,9 @@ def fill_planes_fen(iplanes, fen, player):
             for idx in range(N_PIECES):
                 if holdings[idx] > 0:
                     if not flip_rank:
-                        iplanes[idx   + N_PIECES, :,  :] = holdings[idx] / 50.0
+                        iplanes[:,  :, idx   + N_PIECES] = holdings[idx] / 50.0
                     else:
-                        iplanes[(idx^1) + N_PIECES, :,  :] = holdings[idx] / 50.0
+                        iplanes[:,  :, (idx^1) + N_PIECES] = holdings[idx] / 50.0
         cnt = cnt + 2
 
     #enpassant, castling, fifty and on-board mask
@@ -400,21 +406,21 @@ def fill_planes_fen(iplanes, fen, player):
         r = epstr[1] - '1'
         if flip_rank: r = RANK_U - r
         if flip_file: f = FILE_U - f
-        iplanes[CHANNELS - 8, r, f] = 1
+        iplanes[r, f, CHANNELS - 8] = 1
 
     castr = words[1]
     if castr.find('Q' if player == 0 else 'q') != -1:
-        iplanes[CHANNELS - (6 if flip_file else 7), :, :] = 1
+        iplanes[:, :, CHANNELS - (6 if flip_file else 7)] = 1
     if castr.find('K' if player == 0 else 'k') != -1:
-        iplanes[CHANNELS - (7 if flip_file else 6), :, :] = 1
+        iplanes[:, :, CHANNELS - (7 if flip_file else 6)] = 1
     if castr.find('q' if player == 0 else 'Q') != -1:
-        iplanes[CHANNELS - (4 if flip_file else 5), :, :] = 1
+        iplanes[:, :, CHANNELS - (4 if flip_file else 5)] = 1
     if castr.find('k' if player == 0 else 'K') != -1:
-        iplanes[CHANNELS - (5 if flip_file else 4), :, :] = 1
+        iplanes[:, :, CHANNELS - (5 if flip_file else 4)] = 1
 
-    iplanes[CHANNELS - 3, :, :] = float(words[4]) / 200.0
-    iplanes[CHANNELS - 2, :, :] = float(words[3]) / 100.0
-    iplanes[CHANNELS - 1, :, :] = 1
+    iplanes[:, :, CHANNELS - 3] = float(words[4]) / 200.0
+    iplanes[:, :, CHANNELS - 2] = float(words[3]) / 100.0
+    iplanes[:, :, CHANNELS - 1] = 1
 
 def fill_examples(examples, spid):
 
@@ -424,7 +430,7 @@ def fill_examples(examples, spid):
         iplanes = np.zeros(shape=(2,N*(64+NNUE_FEATURES_EXTRA),2), dtype=np.uint)
         ivalues = np.zeros(shape=(2,N*(64+NNUE_FEATURES_EXTRA)), dtype=np.int8)
     else:
-        iplanes = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
+        iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int)
     if HEAD_TYPE == 0:
         ovalue = np.zeros(shape=(N,3),dtype=np.float32)

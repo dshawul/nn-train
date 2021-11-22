@@ -4,7 +4,7 @@ import argparse
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
-from train import my_load_model, NNUE_KINDICES, NNUE_FEATURES
+from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS, NNUE_FEATURES, NNUE_FEATURES_EXTRA
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -63,16 +63,16 @@ def plot(wm,name="",scale=8):
     """
     nr, nc = NNUE_KINDICES*8, 12*8
     wc = np.zeros(shape=(nr,nc,3), dtype=np.float32)
-    for i in range(NNUE_KINDICES):
-        for j in range(12):
-            for k in range(64):
+    for k in range(64):
+        for i in range(NNUE_KINDICES):
+            for j in range(12):
                 r, g, b = 2.0, 2.0, 2.0
                 for m in range(86):
-                    r += wm[i*12*64+j*64+k,m]*scale
+                    r += wm[k*NNUE_KINDICES*12+i*12+j,m]*scale
                 for m in range(86):
-                    g += wm[i*12*64+j*64+k,m+86]*scale
+                    g += wm[k*NNUE_KINDICES*12+i*12+j,m+86]*scale
                 for m in range(84):
-                    b += wm[i*12*64+j*64+k,m+172]*scale
+                    b += wm[k*NNUE_KINDICES*12+i*12+j,m+172]*scale
                 r, g, b = r/4, g/4, b/4
                 wc[(NNUE_KINDICES-1-i)*8 + (7-k//8), (j*8)+k%8, :] = [r,g,b]
                 # print(r,g,b)
@@ -103,33 +103,34 @@ def save_weights(m,name):
                     plt.figure(figsize=(20, 10))
 
                     #no factorizer
-                    for i in range(NNUE_KINDICES):
-                        for j in range(12):
-                            for k in range(64):
-                                wm[i*12*64+j*64+k,:] =  wi[i*12*64+j*64+k,:]
+                    for k in range(64):
+                        for i in range(NNUE_KINDICES):
+                            for j in range(12):
+                                wm[k*NNUE_KINDICES*12+i*12+j,:] =  wi[k*NNUE_CHANNELS+i*12+j,:]
                     plt.subplot(1,3,1)
                     plot(wm,'plain')
 
                     #k-psqt factorizer
-                    for i in range(NNUE_KINDICES):
-                        for j in range(12):
-                            for k in range(64):
-                                wm[i*12*64+j*64+k,:] += wi[NNUE_KINDICES*12*64+j*64+k,:]
+                    for k in range(64):
+                        for i in range(NNUE_KINDICES):
+                            for j in range(12):
+                                wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
                     plt.subplot(1,3,2)
                     plot(wm,'kpsqt')
 
                     #material count and light/dark bishops factorizer
-                    for i in range(NNUE_KINDICES):
-                        for j in range(1,6):
-                            for k in range(64):
-                                wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+j]
-                                if j == 3:
-                                    f = k % 8
-                                    r = k // 8
-                                    if((r + f) & 1) == 1:
-                                        wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+6]
-                                    else:
-                                        wm[i*12*64+j*64+k,:] += wi[(NNUE_KINDICES+1)*12*64+7]
+                    if NNUE_FEATURES_EXTRA > 0:
+                        for i in range(NNUE_KINDICES):
+                            for j in range(6):
+                                for k in range(64):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+j]
+                                    if j == 3:
+                                        f = k % 8
+                                        r = k // 8
+                                        if((r + f) & 1) == 1:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+6]
+                                        else:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+7]
                     plt.subplot(1,3,3)
                     plot(wm,'material')
 
