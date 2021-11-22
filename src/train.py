@@ -592,11 +592,15 @@ def sloss(y_true, y_pred):
     sz = tf.cast(tf.size(is_legal), tf.float32)
     return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
 
+def nloss(y_true, y_pred):
+    return tf.reduce_mean(tf.math.pow(tf.math.abs(y_pred - y_true), 2.6), axis=-1)
+
 def my_load_model(fname,compile=True):
     return tf.keras.models.load_model(fname, compile=compile,
             custom_objects={'loss': loss,
                             'paccuracy':paccuracy,
                             'sloss':sloss,
+                            'nloss':nloss,
                             'clipped_relu':nnue.clipped_relu,
                             'DenseLayerForSparse':nnue.DenseLayerForSparse})
 
@@ -643,7 +647,7 @@ class NNet():
             metrics = {"value":'accuracy', "policya":paccuracy}
             loss_weights = [args.val_w, args.pol_w, args.score_w]
         else:
-            losses  = {"value":'mean_squared_error'}
+            losses  = {"value":nloss}
             metrics = {}
             loss_weights = [args.val_w]
 
