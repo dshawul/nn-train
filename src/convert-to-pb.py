@@ -14,7 +14,7 @@ try:
 except:
     pass
 
-SAVE_BIN = False
+SAVE_BIN = True
 VERSION = 0
 
 def freeze_model(model):

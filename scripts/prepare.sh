@@ -2,7 +2,7 @@
 NDIR=$1
 SDIR=$( dirname ${BASH_SOURCE[0]} )
 if [ ! -z "$3" ] && [ $3 -eq 5 ]; then
-   OUT="-O value/Sigmoid"
+   OUT="-O model_1/value/Sigmoid"
 else
    OUT="-O value/BiasAdd -O policy/Reshape"
 fi
