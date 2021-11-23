@@ -915,6 +915,9 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
         if not p1.is_alive():
             break
 
+        if chunk >= args.max_chunks:
+            break
+
         chunk = chunk + 1
 
     p1.terminate()
@@ -959,6 +962,8 @@ def main(argv):
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
     parser.add_argument('--head-type',dest='head_type', required=False, type=int, default=HEAD_TYPE, \
         help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three, 3=value only.')
+    parser.add_argument('--max-chunks',dest='max_chunks', required=False, type=int, default=1000000, \
+        help='Maximum number of chunks to train for.')
 
     args = parser.parse_args()
 
