@@ -273,35 +273,48 @@ def fill_planes_nnue_(iplanes, ivalues, cidx, pid, kidx, b, side, flip_rank, fli
         cidx = cidx + 1
 
         #queen
-        iplanes[cidx,1] = off + 1
-        ivalues[cidx] = chess.popcount(b.queens  & b.occupied_co[pl])
-        cidx = cidx + 1
+        cnt = chess.popcount(b.queens  & b.occupied_co[pl])
+        if cnt > 0:
+            iplanes[cidx,1] = off + 1
+            ivalues[cidx] = cnt
+            cidx = cidx + 1
         #rook
-        iplanes[cidx,1] = off + 2
-        ivalues[cidx] = chess.popcount(b.rooks   & b.occupied_co[pl])
-        cidx = cidx + 1
+        cnt = chess.popcount(b.rooks   & b.occupied_co[pl])
+        if cnt > 0:
+            iplanes[cidx,1] = off + 2
+            ivalues[cidx] = cnt
+            cidx = cidx + 1
         #bishop
-        iplanes[cidx,1] = off + 3
-        ivalues[cidx] = chess.popcount(b.bishops & b.occupied_co[pl])
-        cidx = cidx + 1
+        cnt = chess.popcount(b.bishops & b.occupied_co[pl])
+        if cnt > 0:
+            iplanes[cidx,1] = off + 3
+            ivalues[cidx] = cnt
+            cidx = cidx + 1
+
+            ## Bishop on light/dark square ##
+            cnt = chess.popcount((b.bishops & chess.BB_LIGHT_SQUARES) & b.occupied_co[pl])
+            if cnt > 0:
+                iplanes[cidx,1] = off + 6
+                ivalues[cidx] = cnt
+                cidx = cidx + 1
+
+            cnt = chess.popcount((b.bishops & chess.BB_DARK_SQUARES) & b.occupied_co[pl])
+            if cnt > 0:
+                iplanes[cidx,1] = off + 7
+                ivalues[cidx] = cnt
+                cidx = cidx + 1
         #knight
-        iplanes[cidx,1] = off + 4
-        ivalues[cidx] = chess.popcount(b.knights & b.occupied_co[pl])
-        cidx = cidx + 1
+        cnt = chess.popcount(b.knights & b.occupied_co[pl])
+        if cnt > 0:
+            iplanes[cidx,1] = off + 4
+            ivalues[cidx] = cnt
+            cidx = cidx + 1
         #pawn
-        iplanes[cidx,1] = off + 5
-        ivalues[cidx] = chess.popcount(b.pawns   & b.occupied_co[pl])
-        cidx = cidx + 1
-
-        ## Bishop on light/dark square ##
-
-        iplanes[cidx,1] = off + 6
-        ivalues[cidx] = chess.popcount((b.bishops & chess.BB_LIGHT_SQUARES) & b.occupied_co[pl])
-        cidx = cidx + 1
-
-        iplanes[cidx,1] = off + 7
-        ivalues[cidx] = chess.popcount((b.bishops & chess.BB_DARK_SQUARES) & b.occupied_co[pl])
-        cidx = cidx + 1
+        cnt = chess.popcount(b.pawns   & b.occupied_co[pl])
+        if cnt > 0:
+            iplanes[cidx,1] = off + 5
+            ivalues[cidx] = cnt
+            cidx = cidx + 1
 
     iplanes[st:cidx, 0] = pid
 
