@@ -4,7 +4,7 @@ import argparse
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
-from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS, NNUE_FEATURES, NNUE_FEATURES_EXTRA
+from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS, NNUE_FEATURES, NNUE_FACTORIZER, NNUE_FACTORIZER_EXTRA
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -111,26 +111,50 @@ def save_weights(m,name):
                     plot(wm,'plain')
 
                     #k-psqt factorizer
-                    for k in range(64):
-                        for i in range(NNUE_KINDICES):
-                            for j in range(12):
-                                wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
-                    plt.subplot(1,3,2)
-                    plot(wm,'kpsqt')
+                    if NNUE_FACTORIZER > 0:
+                        for k in range(64):
+                            for i in range(NNUE_KINDICES):
+                                for j in range(12):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
+                        plt.subplot(1,3,2)
+                        plot(wm,'kpsqt')
 
-                    #material count and light/dark bishops factorizer
+                    #file,rank,and 4 rings factorizors
                     if NNUE_FEATURES_EXTRA > 0:
-                        for i in range(NNUE_KINDICES):
-                            for j in range(6):
-                                for k in range(64):
-                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+j]
+                        ch = (NNUE_KINDICES+1)*12
+                        for k in range(64):
+                            f = k % 8
+                            r = k / 8
+                            for i in range(NNUE_KINDICES):
+                                for j in range(6):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += \
+                                        win[ch+0,j*8+f,:] + \
+                                        win[ch+1,j*8+r,:] + \
+                                        win[ch+0,6*8+j,:]
+                                    if r >= 1 and r < 7 and f >= 1 and f < 7:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+j,:]
+                                    if r >= 2 and r < 6 and f >= 2 and f < 6:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+j,:]
+                                    if r >= 3 and r < 5 and f >= 3 and f < 5:
+                                        wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+j,:]
+                                    if (r + f) % 2 == 0:
+                                        if j == 3:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+6,:]
+                                        if j == 4:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,6*8+7,:]
+                                        if j == 5:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+6,:]
+                                            if r >= 2 and r < 6 and f >= 2 and f < 6:
+                                                wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+7,:]
                                     if j == 3:
-                                        f = k % 8
-                                        r = k // 8
-                                        if((r + f) & 1) == 1:
-                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+6]
-                                        else:
-                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[NNUE_CHANNELS*64+7]
+                                        if r == f:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+6,:]
+                                        if r + f == 7:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,6*8+7,:]
+                                        if r == f + 1 or r + 1 == f:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
+                                        if r + f == 6 or r + f == 8:
+                                            wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
                     plt.subplot(1,3,3)
                     plot(wm,'material')
 
