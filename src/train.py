@@ -517,12 +517,12 @@ class NNet():
     def __init__(self,args):
         self.mirrored_strategy = tf.distribute.MirroredStrategy()
 
-    def new_model(self,idx,args):
+    def new_model(self,args):
         if args.gpus > 1:
             with self.mirrored_strategy.scope():
-                return build_model(idx)
+                return build_model(args.net)
         else:
-            return build_model(idx)
+            return build_model(args.net)
 
     def load_model(self,fname,compile,args):
         if args.gpus > 1:
@@ -682,33 +682,29 @@ class NNet():
             os.mkdir(args.dir)
 
         #save each model
-        for i,n in enumerate(args.nets):
-            fname = filepath  + "-model-" + str(n)
-            self.model[i].save(fname, include_optimizer=iopt, save_format='h5')
+        fname = filepath  + "-model-" + str(args.net)
+        self.model.save(fname, include_optimizer=iopt, save_format='h5')
 
     def load_checkpoint(self, chunk, args):
         filepath = os.path.join(args.dir, "ID-" + str(chunk))
 
-        #create training model
-        self.model = []
-        self.cbacks = []
-        for n in args.nets:
-            fname = filepath  + "-model-" + str(n)
-            if not os.path.exists(fname):
-                mdx = self.new_model(n,args)
+        #create training model]
+        fname = filepath  + "-model-" + str(args.net)
+        if not os.path.exists(fname):
+            mdx = self.new_model(args)
+            self.compile_model(mdx, args)
+        else:
+            comp = (chunk % args.rsavo == 0)
+            mdx = self.load_model(fname,comp,args)
+            if not mdx.optimizer:
+                print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
-            else:
-                comp = (chunk % args.rsavo == 0)
-                mdx = self.load_model(fname,comp,args)
-                if not mdx.optimizer:
-                    print("====== ", fname, " : starting from fresh optimizer state ======")
-                    self.compile_model(mdx, args)
-            self.model.append( mdx )
+        self.model.append( mdx )
 
-            log_dir = "logs/fit/model-" + str(n)
-            tensorboard_callback = tf.keras.callbacks.TensorBoard( \
-                log_dir=log_dir,update_freq='epoch')
-            self.cbacks.append ( tensorboard_callback )
+        log_dir = "logs/fit/model-" + str(n)
+        tensorboard_callback = tf.keras.callbacks.TensorBoard( \
+            log_dir=log_dir,update_freq='epoch')
+        self.cbacks.append ( tensorboard_callback )
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
@@ -718,10 +714,9 @@ class NNet():
         tf.keras.backend.set_learning_phase(0)
 
         #create inference model
-        for n in args.nets:
-            fname = filepath + str(n)
-            new_model = self.new_model(n,args)
-            new_model.save(fname, include_optimizer=False, save_format='h5')
+        fname = filepath + str(args.net)
+        new_model = self.new_model(args)
+        new_model.save(fname, include_optimizer=False, save_format='h5')
 
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(1)
@@ -852,8 +847,8 @@ def main(argv):
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=mp.cpu_count(), help='Number of cores to use.')
     parser.add_argument('--gpus',dest='gpus', required=False, type=int, default=0, help='Number of gpus to use.')
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
-    parser.add_argument('--nets',dest='nets', nargs='+', required=False, type=int, default=[0,1,2], \
-                        help='Nets to train from 0=2x32,6x64,12x128,20x256,4=30x384,5=NNUE.')
+    parser.add_argument('--net',dest='net', required=False, type=int, default=0, \
+                        help='Net to train from 0=2x32,6x64,12x128,20x256,4=30x384,5=NNUE.')
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
@@ -920,7 +915,7 @@ def main(argv):
         tf.compat.v1.keras.backend.set_session(sess)
 
     #load networks
-    print("Loading networks: " + (','.join(str(x) for x in args.nets)) )
+    print("Loading network: " + str(args.net))
     start_t = time.time()
     myNet.load_checkpoint(chunk, args)
     end_t = time.time()
