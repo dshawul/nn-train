@@ -9,6 +9,7 @@ import gzip
 import numpy as np
 import multiprocessing as mp
 from joblib import Parallel, delayed
+from ctypes import cdll, c_int, c_char_p, POINTER, pointer
 
 #import tensorflow and set logging level
 import os
@@ -35,6 +36,8 @@ FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
 MAX_QUEUE = 1
+use_data_loader = True
+data_loader = None
 
 #NNUE
 NNUE_KIDX = 4
@@ -507,11 +510,11 @@ def fill_examples(examples, spid):
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(2,N*192,2), dtype=np.uint)
+        iplanes = np.zeros(shape=(2,N*192,2), dtype=np.int32)
         ivalues = np.zeros(shape=(2,N*192), dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-    oresult = np.zeros(shape=(N,),dtype=np.int)
+    oresult = np.zeros(shape=(N,),dtype=np.int8)
     if HEAD_TYPE == 0:
         ovalue = np.zeros(shape=(N,3),dtype=np.float32)
         opolicy = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
@@ -736,78 +739,14 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,N,res,local_steps,args):
-
-        # generate X and Y
-        nlen = N // args.cores
-        slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
-
-        if HEAD_TYPE == 3:
-            S1,S2 = 0,0
-            for i in range(args.cores):
-                S1 = S1 + res[i][0].shape[0]
-                S2 = S2 + res[i][1].shape[0]
-            iplanes0 = np.zeros(shape=(S1,2), dtype=np.uint)
-            iplanes1 = np.zeros(shape=(S2,2), dtype=np.uint)
-            ivalues0 = np.zeros(shape=(S1), dtype=np.int8)
-            ivalues1 = np.zeros(shape=(S2), dtype=np.int8)
-        else:
-            ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-        ores = np.zeros(shape=(N,),dtype=np.int)
-        if HEAD_TYPE == 0:
-            oval = np.zeros(shape=(N,3),dtype=np.float32)
-            opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-            x = [ipln]
-            y = [oval, opol]
-        elif HEAD_TYPE == 1:
-            oval = np.zeros(shape=(N,3),dtype=np.float32)
-            osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-            x = [ipln]
-            y = [oval, osco]
-        elif HEAD_TYPE == 2:
-            oval = np.zeros(shape=(N,3),dtype=np.float32)
-            opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-            osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-            x = [ipln]
-            y = [oval, opol, osco]
-        else:
-            oval = np.zeros(shape=(N,),dtype=np.float32)
-            y = [oval]
-
-        #merge results from different cores
-        cidx1,cidx2 = 0,0
-        for i in range(args.cores):
-            if HEAD_TYPE == 3:
-                S1 = res[i][0].shape[0]
-                S2 = res[i][1].shape[0]
-                iplanes0[cidx1:(cidx1 + S1),:] = res[i][0]
-                iplanes1[cidx2:(cidx2 + S2),:] = res[i][1]
-                ivalues0[cidx1:(cidx1 + S1)] = res[i][2]
-                ivalues1[cidx2:(cidx2 + S2)] = res[i][3]
-                cidx1 = cidx1 + S1
-                cidx2 = cidx2 + S2
-                ores[slices[i]] = res[i][4]
-            else:
-                ipln[slices[i],:,:,:] = res[i][0]
-                ores[slices[i]] = res[i][1]
-            if HEAD_TYPE == 0:
-                oval[slices[i],:] = res[i][2]
-                opol[slices[i],:] = res[i][3]
-            elif HEAD_TYPE == 1:
-                oval[slices[i],:] = res[i][2]
-                osco[slices[i],:] = res[i][3]
-            elif HEAD_TYPE == 2:
-                oval[slices[i],:] = res[i][2]
-                opol[slices[i],:] = res[i][3]
-                osco[slices[i],:] = res[i][4]
-            else:
-                oval[slices[i]] = res[i][5]
+    def train(self,x,y,local_steps,args):
 
         #construct sparse matrix
         if HEAD_TYPE == 3:
+            N = y[0].shape[0]
             dense_shape = (N,NNUE_FEATURES)
-            x1 = tf.sparse.reorder(tf.SparseTensor(iplanes0[:,:],ivalues0[:],dense_shape))
-            x2 = tf.sparse.reorder(tf.SparseTensor(iplanes1[:,:],ivalues1[:],dense_shape))
+            x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
+            x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
             x = [x1, x2]
 
         #sampe weight
@@ -892,13 +831,111 @@ class NNet():
         tf.keras.backend.clear_session()
         tf.keras.backend.set_learning_phase(1)
 
+def prep_data(N,examples,args):
+
+    #multiprocess epd
+    nlen = int(round(N/args.cores))
+    slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
+    res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl],sl.start) for sl in slices )
+
+    # generate X and Y
+    if HEAD_TYPE == 3:
+        S1,S2 = 0,0
+        for i in range(args.cores):
+            S1 = S1 + res[i][0].shape[0]
+            S2 = S2 + res[i][1].shape[0]
+        iplanes0 = np.zeros(shape=(S1,2), dtype=np.int32)
+        iplanes1 = np.zeros(shape=(S2,2), dtype=np.int32)
+        ivalues0 = np.zeros(shape=(S1), dtype=np.int8)
+        ivalues1 = np.zeros(shape=(S2), dtype=np.int8)
+        x = [iplanes0, iplanes1, ivalues0, ivalues1]
+    else:
+        ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
+    ores = np.zeros(shape=(N,),dtype=np.int8)
+    if HEAD_TYPE == 0:
+        oval = np.zeros(shape=(N,3),dtype=np.float32)
+        opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+        x = [ipln]
+        y = [oval, opol]
+    elif HEAD_TYPE == 1:
+        oval = np.zeros(shape=(N,3),dtype=np.float32)
+        osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+        x = [ipln]
+        y = [oval, osco]
+    elif HEAD_TYPE == 2:
+        oval = np.zeros(shape=(N,3),dtype=np.float32)
+        opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+        osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+        x = [ipln]
+        y = [oval, opol, osco]
+    else:
+        oval = np.zeros(shape=(N,),dtype=np.float32)
+        y = [oval]
+
+    #merge results from different cores
+    cidx0,cidx1 = 0,0
+    for i in range(args.cores):
+        if HEAD_TYPE == 3:
+            S1 = res[i][0].shape[0]
+            S2 = res[i][1].shape[0]
+            iplanes0[cidx0:(cidx0 + S1),:] = res[i][0]
+            iplanes1[cidx1:(cidx1 + S2),:] = res[i][1]
+            ivalues0[cidx0:(cidx0 + S1)] = res[i][2]
+            ivalues1[cidx1:(cidx1 + S2)] = res[i][3]
+            cidx0 = cidx0 + S1
+            cidx1 = cidx1 + S2
+            ores[slices[i]] = res[i][4]
+        else:
+            ipln[slices[i],:,:,:] = res[i][0]
+            ores[slices[i]] = res[i][1]
+        if HEAD_TYPE == 0:
+            oval[slices[i],:] = res[i][2]
+            opol[slices[i],:] = res[i][3]
+        elif HEAD_TYPE == 1:
+            oval[slices[i],:] = res[i][2]
+            osco[slices[i],:] = res[i][3]
+        elif HEAD_TYPE == 2:
+            oval[slices[i],:] = res[i][2]
+            opol[slices[i],:] = res[i][3]
+            osco[slices[i],:] = res[i][4]
+        else:
+            oval[slices[i]] = res[i][5]
+
+    return x,y
+
+def prep_data_nnue(N,examples,args):
+    global data_loader
+
+    iplanes0 = np.zeros(shape=(N*192,2), dtype=np.int32)
+    ivalues0 = np.zeros(shape=(N*192), dtype=np.int32)
+    iplanes1 = np.zeros(shape=(N*192,2), dtype=np.int32)
+    ivalues1 = np.zeros(shape=(N*192), dtype=np.int32)
+    oval = np.zeros(shape=(N,),dtype=np.float32)
+    cidx0 = c_int()
+    cidx1 = c_int()
+
+    epd = ''.join(examples)
+    
+    data_loader.generate_input_nnue(
+        epd.encode(),
+        iplanes0,ivalues0,
+        iplanes1,ivalues1,oval,
+        pointer(cidx0),pointer(cidx1))
+
+    cidx0 = cidx0.value
+    cidx1 = cidx1.value
+
+    x = [iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1]]
+    y = [oval]
+
+    return x,y
+
 def get_chunk(myNet,args,myEpd,start):
 
     with (open(myEpd) if not args.gzip else gzip.open(myEpd,mode='rt')) as file:
         count = 0
 
         examples = []
-        start_t = time.time()
 
         while True:
 
@@ -916,26 +953,24 @@ def get_chunk(myNet,args,myEpd,start):
 
             #train network
             if (not line) or (count % EPD_CHUNK_SIZE == 0):
-                chunk = (count + EPD_CHUNK_SIZE - 1) // EPD_CHUNK_SIZE
-                end_t = time.time()
 
                 #make sure size is divisible by BATCH_SIZE
                 if (not line) and (count % BATCH_SIZE != 0): 
-                   count = (count//BATCH_SIZE)*BATCH_SIZE
-                   if count > 0:
+                    count = (count//BATCH_SIZE)*BATCH_SIZE
+                    if count > 0:
                         del examples[count:]
-                   else:
+                    else:
                         break
 
+                #prep ML data
                 N = len(examples)
                 if N > 0:
-                    #multiprocess epd
-                    nlen = N//args.cores
-                    slices = [ slice((id*nlen) , (min(N,(id+1)*nlen))) for id in range(args.cores) ]
-                    res = Parallel(n_jobs=args.cores)( delayed(fill_examples) (examples[sl],sl.start) for sl in slices )
-
+                    if use_data_loader:
+                        x,y = prep_data_nnue(N,examples,args)
+                    else:
+                        x,y = prep_data(N,examples,args)
                     examples = []
-                    yield N,res
+                    yield x,y
 
             #break out
             if not line:
@@ -961,7 +996,7 @@ class MyProcess(mp.Process):
 def train_epd(myNet,args,myEpd,chunk,start=1):
     gen = get_chunk(myNet,args,myEpd,start)
     s = time.time()
-    N,res = next(gen)
+    x1,y1 = next(gen)
     e = time.time()
     print("Average chunk prep time ", round(e - s, 2), "sec")
 
@@ -974,12 +1009,13 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
             chunk * EPD_CHUNK_SIZE, " with lr ", args.lr)
         s = time.time()
 
-        myNet.train(N,res,(chunk-1)*NBATCH,args)
+        x,y = x1,y1
+        myNet.train(x,y,(chunk-1)*NBATCH,args)
+        del x,y
 
         p1.join(timeout=0)
         if p1.is_alive():
-            del res
-            N,res = queue.get()
+            x1,y1 = queue.get()
 
         if chunk % args.rsavo == 0:
             myNet.save_checkpoint(chunk, args, True)
@@ -1004,6 +1040,20 @@ def train_epd(myNet,args,myEpd,chunk,start=1):
 def main(argv):
     global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
     global POLICY_CHANNELS,  NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
+
+    if use_data_loader:
+        global data_loader
+        data_loader = cdll.LoadLibrary("data_loader/data_loader.so")
+        data_loader.generate_input_nnue.restype = None
+        data_loader.generate_input_nnue.argtypes = [
+            c_char_p,
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
+            POINTER(c_int),
+            POINTER(c_int) ]
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
