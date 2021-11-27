@@ -19,6 +19,8 @@ try:
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 except:
     pass
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
 
 #global params
 AUX_INP = True
@@ -26,9 +28,7 @@ CHANNELS = 32
 BOARDX = 8
 BOARDY = 8
 POLICY_CHANNELS = 16
-NBATCH = 512
 BATCH_SIZE = 512
-EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
 PIECE_MAP = "KQRBNPkqrbnp"
 RANK_U = BOARDY - 1
 FILE_U = BOARDX - 1
@@ -739,55 +739,31 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,x,y,local_steps,args):
+    def train(self,gen,local_steps,args):
 
-        #construct sparse matrix
-        if HEAD_TYPE == 3:
-            N = y[0].shape[0]
-            dense_shape = (N,NNUE_FEATURES)
-            x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
-            x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
-            x = [x1, x2]
+        #initial steps
+        initial_steps = args.global_steps + local_steps
 
-        #sampe weight
-        vweights = None
-        pweights = None
-        if args.pol_grad > 0:
-            vweights = np.ones(ores.size)
-            pweights = (1.0 - ores / 2.0) - (oval[:,0] + oval[:,1] / 2.0) #  Z-Q
+        for steps in range(args.max_steps):
+            t_steps = steps + initial_steps
 
-        #train each model
-        for i in range(len(self.model)):
-            print("Fitting model",i)
+            self.callbacks.on_train_batch_begin(steps)
 
-            tensorboard_callback = self.cbacks[i]
-            initial_epoch = args.global_steps + local_steps
-            epochs = initial_epoch + args.epochs
+            x,y = next(gen)
+            logs = self.model.train_on_batch(x,y,reset_metrics = False,return_dict = True)
 
-            if args.pol_grad > 0:
-                self.model[i].fit(x = x, y = y,
-                      batch_size=BATCH_SIZE,
-                      sample_weight=[vweights, pweights],
-                      validation_split=args.vald_split,
-                      initial_epoch=initial_epoch,
-                      epochs=epochs,
-                      callbacks=[tensorboard_callback])
-            elif HEAD_TYPE == 3:
-                self.model[i].fit(x = x, y = y,
-                      batch_size=BATCH_SIZE,
-                      initial_epoch=initial_epoch,
-                      epochs=epochs,
-                      callbacks=[tensorboard_callback])
-            else:
-                self.model[i].fit(x = x, y = y,
-                      batch_size=BATCH_SIZE,
-                      validation_split=args.vald_split,
-                      initial_epoch=initial_epoch,
-                      epochs=epochs,
-                      callbacks=[tensorboard_callback])
+            self.callbacks.on_train_batch_end(steps, logs)
 
-    def save_checkpoint(self, chunk, args, iopt=False):
-        filepath = os.path.join(args.dir, "ID-" + str(chunk))
+            self.tensorboard.on_epoch_end(t_steps, logs)
+
+            nid = (steps + 1) // args.rsav
+            if (steps + 1) % args.rsavo == 0:
+                self.save_checkpoint(nid, args, True)
+            elif (steps + 1) % args.rsav == 0:
+                self.save_checkpoint(nid, args, False)
+
+    def save_checkpoint(self, nid, args, iopt=False):
+        filepath = os.path.join(args.dir, "ID-" + str(nid))
         if not os.path.exists(args.dir):
             os.mkdir(args.dir)
 
@@ -795,8 +771,8 @@ class NNet():
         fname = filepath  + "-model-" + str(args.net)
         self.model.save(fname, include_optimizer=iopt, save_format='h5')
 
-    def load_checkpoint(self, chunk, args):
-        filepath = os.path.join(args.dir, "ID-" + str(chunk))
+    def load_checkpoint(self, nid, args):
+        filepath = os.path.join(args.dir, "ID-" + str(nid))
 
         #create training model]
         fname = filepath  + "-model-" + str(args.net)
@@ -804,17 +780,31 @@ class NNet():
             mdx = self.new_model(args)
             self.compile_model(mdx, args)
         else:
-            comp = (chunk % args.rsavo == 0)
+            comp = ((nid * args.rsav) % args.rsavo == 0)
             mdx = self.load_model(fname,comp,args)
             if not mdx.optimizer:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
-        self.model.append( mdx )
+        self.model = mdx
 
-        log_dir = "logs/fit/model-" + str(n)
-        tensorboard_callback = tf.keras.callbacks.TensorBoard( \
-            log_dir=log_dir,update_freq='epoch')
-        self.cbacks.append ( tensorboard_callback )
+        #common callbacks list
+        self.callbacks = tf.keras.callbacks.CallbackList(
+            None,
+            add_history = True,
+            add_progbar = True,
+            model = self.model,
+            epochs = 1,
+            verbose = 1,
+            steps = args.max_steps
+        )
+
+        #tensorboard callback
+        log_dir = "logs/fit/model-" + str(args.net)
+        self.tensorboard = tf.keras.callbacks.TensorBoard(
+            log_dir=log_dir,
+            update_freq=args.rsav
+        )
+        self.tensorboard.set_model(self.model)
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
@@ -901,6 +891,13 @@ def prep_data(N,examples,args):
         else:
             oval[slices[i]] = res[i][5]
 
+    #construct sparse matrix
+    if HEAD_TYPE == 3:
+        dense_shape = (N,NNUE_FEATURES)
+        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
+        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
+        x = [x1, x2]
+
     return x,y
 
 def prep_data_nnue(N,examples,args):
@@ -928,9 +925,16 @@ def prep_data_nnue(N,examples,args):
     x = [iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1]]
     y = [oval]
 
+    #construct sparse matrix
+    if HEAD_TYPE == 3:
+        dense_shape = (N,NNUE_FEATURES)
+        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
+        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
+        x = [x1, x2]
+
     return x,y
 
-def get_chunk(myNet,args,myEpd,start):
+def get_batch(myNet,args,myEpd,start):
 
     with (open(myEpd) if not args.gzip else gzip.open(myEpd,mode='rt')) as file:
         count = 0
@@ -952,10 +956,10 @@ def get_chunk(myNet,args,myEpd,start):
                 count = count - 1
 
             #train network
-            if (not line) or (count % EPD_CHUNK_SIZE == 0):
+            if (not line) or (count % BATCH_SIZE == 0):
 
                 #make sure size is divisible by BATCH_SIZE
-                if (not line) and (count % BATCH_SIZE != 0): 
+                if (not line) and (count % BATCH_SIZE != 0):
                     count = (count//BATCH_SIZE)*BATCH_SIZE
                     if count > 0:
                         del examples[count:]
@@ -976,70 +980,13 @@ def get_chunk(myNet,args,myEpd,start):
             if not line:
                 break
 
-class MyProcess(mp.Process):
-
-    def __init__(self,gen,queue):
-        mp.Process.__init__(self)
-        self.gen = gen
-        self.queue = queue
-
-    def run(self):
-        while True:
-            if self.queue.qsize() < MAX_QUEUE:
-                try:
-                    self.queue.put(next(self.gen))
-                except StopIteration:
-                    break
-            else:
-                time.sleep(0.1)
-
-def train_epd(myNet,args,myEpd,chunk,start=1):
-    gen = get_chunk(myNet,args,myEpd,start)
-    s = time.time()
-    x1,y1 = next(gen)
-    e = time.time()
-    print("Average chunk prep time ", round(e - s, 2), "sec")
-
-    queue = mp.Queue()
-    p1 = MyProcess(gen,queue)
-    p1.start()
-
-    while True:
-        print("Training on chunk ", chunk , " ending at position ",
-            chunk * EPD_CHUNK_SIZE, " with lr ", args.lr)
-        s = time.time()
-
-        x,y = x1,y1
-        myNet.train(x,y,(chunk-1)*NBATCH,args)
-        del x,y
-
-        p1.join(timeout=0)
-        if p1.is_alive():
-            x1,y1 = queue.get()
-
-        if chunk % args.rsavo == 0:
-            myNet.save_checkpoint(chunk, args, True)
-        elif chunk % args.rsav == 0:
-            myNet.save_checkpoint(chunk, args, False)
-
-        e = time.time()
-        print("Total time ", round(e - s, 2), "sec")
-
-        p1.join(timeout=0)
-        if not p1.is_alive():
-            break
-
-        if chunk >= args.max_chunks:
-            break
-
-        chunk = chunk + 1
-
-    p1.terminate()
-    print("===== Finished training ====")
+def train_epd(myNet,args,myEpd,nid,start=1):
+    gen = get_batch(myNet,args,myEpd,start)
+    myNet.train(gen,nid*args.rsav,args)
 
 def main(argv):
-    global AUX_INP, EPD_CHUNK_SIZE, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
-    global POLICY_CHANNELS,  NBATCH, BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
+    global AUX_INP, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
+    global POLICY_CHANNELS,  BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
 
     if use_data_loader:
         global data_loader
@@ -1061,8 +1008,6 @@ def main(argv):
     parser.add_argument('--id','-i', dest='id', required=False, type=int, default=0, help='ID of neural networks to load.')
     parser.add_argument('--global-steps', dest='global_steps', required=False, type=int, default=0, help='Global number of steps trained so far.')
     parser.add_argument('--batch-size','-b',dest='batch_size', required=False, type=int, default=BATCH_SIZE, help='Training batch size.')
-    parser.add_argument('--nbatch',dest='nbatch', required=False, type=int, default=NBATCH, help='Number of batches to process at one time.')
-    parser.add_argument('--epochs',dest='epochs', required=False, type=int, default=1, help='Training epochs.')
     parser.add_argument('--learning-rate','-l',dest='lr', required=False, type=float, default=0.01, help='Training learning rate.')
     parser.add_argument('--validation-split',dest='vald_split', required=False, type=float, default=0.125, help='Fraction of sample to use for validation.')
     parser.add_argument('--cores',dest='cores', required=False, type=int, default=mp.cpu_count(), help='Number of cores to use.')
@@ -1070,8 +1015,8 @@ def main(argv):
     parser.add_argument('--gzip','-z',dest='gzip', required=False, action='store_true',help='Process zipped file.')
     parser.add_argument('--net',dest='net', required=False, type=int, default=0, \
                         help='Net to train from 0=2x32,6x64,12x128,20x256,4=30x384,5=NNUE.')
-    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=1, help='Save graph every RSAV chunks.')
-    parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=20, help='Save optimization state every RSAVO chunks.')
+    parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=16, help='Save graph every RSAV steps.')
+    parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=128, help='Save optimization state every RSAVO steps.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
     parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam.')
     parser.add_argument('--policy-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
@@ -1090,8 +1035,8 @@ def main(argv):
     parser.add_argument('--mixed', dest='mixed', required=False, action='store_true', help='Use mixed precision training')
     parser.add_argument('--head-type',dest='head_type', required=False, type=int, default=HEAD_TYPE, \
         help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three, 3=value only.')
-    parser.add_argument('--max-chunks',dest='max_chunks', required=False, type=int, default=1000000, \
-        help='Maximum number of chunks to train for.')
+    parser.add_argument('--max-steps',dest='max_steps', required=False, type=int, default=1000000, \
+        help='Maximum number of steps to train for.')
 
     args = parser.parse_args()
 
@@ -1107,9 +1052,7 @@ def main(argv):
     # init net
     myNet = NNet(args)
 
-    NBATCH = args.nbatch
     BATCH_SIZE = args.batch_size
-    EPD_CHUNK_SIZE = BATCH_SIZE * NBATCH
     CHANNELS = args.channels
     BOARDX = args.boardx
     BOARDY = args.boardy
@@ -1122,7 +1065,7 @@ def main(argv):
     PIECE_MAP = args.pcmap
     HEAD_TYPE = args.head_type
 
-    chunk = args.id
+    nid = args.id
 
     #save inference graphs
     exists = os.path.exists(args.dir)
@@ -1137,19 +1080,15 @@ def main(argv):
 
     #load networks
     print("Loading network: " + str(args.net))
-    start_t = time.time()
-    myNet.load_checkpoint(chunk, args)
-    end_t = time.time()
-    print("Time", round(end_t - start_t, 2), "sec")
+    myNet.load_checkpoint(nid, args)
 
     if args.rand:
-        myNet.save_checkpoint(chunk, args, True)
+        myNet.save_checkpoint(nid, args, True)
     else:
         if not exists:
-            myNet.save_checkpoint(chunk, args, True)
-        start = chunk * EPD_CHUNK_SIZE + 1
-        train_epd(myNet, args, args.epd, chunk, start)
-
+            myNet.save_checkpoint(nid, args, True)
+        start = nid * args.rsav * BATCH_SIZE + 1
+        train_epd(myNet, args, args.epd, nid, start)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

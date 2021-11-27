@@ -13,6 +13,8 @@ try:
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 except:
     pass
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
 
 SAVE_BIN = False
 VERSION = 0
