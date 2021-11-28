@@ -838,29 +838,29 @@ def prep_data(N,examples,args):
         iplanes1 = np.zeros(shape=(S2,2), dtype=np.int32)
         ivalues0 = np.zeros(shape=(S1), dtype=np.int8)
         ivalues1 = np.zeros(shape=(S2), dtype=np.int8)
-        x = [iplanes0, iplanes1, ivalues0, ivalues1]
+        x = (iplanes0, iplanes1, ivalues0, ivalues1)
     else:
         ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
     ores = np.zeros(shape=(N,),dtype=np.int8)
     if HEAD_TYPE == 0:
         oval = np.zeros(shape=(N,3),dtype=np.float32)
         opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        x = [ipln]
-        y = [oval, opol]
+        x = (ipln)
+        y = (oval, opol)
     elif HEAD_TYPE == 1:
         oval = np.zeros(shape=(N,3),dtype=np.float32)
         osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        x = [ipln]
-        y = [oval, osco]
+        x = (ipln)
+        y = (oval, osco)
     elif HEAD_TYPE == 2:
         oval = np.zeros(shape=(N,3),dtype=np.float32)
         opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
         osco = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        x = [ipln]
-        y = [oval, opol, osco]
+        x = (ipln)
+        y = (oval, opol, osco)
     else:
         oval = np.zeros(shape=(N,),dtype=np.float32)
-        y = [oval]
+        y = (oval)
 
     #merge results from different cores
     cidx0,cidx1 = 0,0
@@ -896,7 +896,7 @@ def prep_data(N,examples,args):
         dense_shape = (N,NNUE_FEATURES)
         x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
         x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
-        x = [x1, x2]
+        x = (x1, x2)
 
     return x,y
 
@@ -922,15 +922,15 @@ def prep_data_nnue(N,examples,args):
     cidx0 = cidx0.value
     cidx1 = cidx1.value
 
-    x = [iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1]]
-    y = [oval]
+    x = (iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1])
+    y = (oval)
 
     #construct sparse matrix
     if HEAD_TYPE == 3:
         dense_shape = (N,NNUE_FEATURES)
         x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
         x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
-        x = [x1, x2]
+        x = (x1, x2)
 
     return x,y
 
