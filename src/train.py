@@ -8,6 +8,7 @@ import argparse
 import gzip
 import numpy as np
 import multiprocessing as mp
+from multiprocessing import Process as Executor
 from joblib import Parallel, delayed
 from ctypes import cdll, c_int, c_char_p, POINTER, pointer
 
@@ -35,9 +36,7 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
-MAX_QUEUE = 1
 use_data_loader = True
-data_loader = None
 
 #NNUE
 NNUE_KIDX = 4
@@ -739,28 +738,23 @@ class NNet():
             mdx.compile(loss=losses,loss_weights=loss_weights,
                   optimizer=opt,metrics=metrics)
 
-    def train(self,gen,local_steps,args):
+    def train(self,x,y,steps,t_steps,args):
 
-        #initial steps
-        initial_steps = args.global_steps + local_steps
+        #construct sparse matrix
+        if HEAD_TYPE == 3:
+            N = y.shape[0]
+            dense_shape = (N,NNUE_FEATURES)
+            x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
+            x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
+            x = [x1, x2]
 
-        for steps in range(args.max_steps):
-            t_steps = steps + initial_steps
+        self.callbacks.on_train_batch_begin(steps)
 
-            self.callbacks.on_train_batch_begin(steps)
+        logs = self.model.train_on_batch(x,y,reset_metrics = False,return_dict = True)
 
-            x,y = next(gen)
-            logs = self.model.train_on_batch(x,y,reset_metrics = False,return_dict = True)
+        self.callbacks.on_train_batch_end(steps, logs)
 
-            self.callbacks.on_train_batch_end(steps, logs)
-
-            self.tensorboard.on_epoch_end(t_steps, logs)
-
-            nid = (steps + 1) // args.rsav
-            if (steps + 1) % args.rsavo == 0:
-                self.save_checkpoint(nid, args, True)
-            elif (steps + 1) % args.rsav == 0:
-                self.save_checkpoint(nid, args, False)
+        self.tensorboard.on_epoch_end(t_steps, logs)
 
     def save_checkpoint(self, nid, args, iopt=False):
         filepath = os.path.join(args.dir, "ID-" + str(nid))
@@ -891,17 +885,9 @@ def prep_data(N,examples,args):
         else:
             oval[slices[i]] = res[i][5]
 
-    #construct sparse matrix
-    if HEAD_TYPE == 3:
-        dense_shape = (N,NNUE_FEATURES)
-        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
-        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
-        x = (x1, x2)
-
     return x,y
 
-def prep_data_nnue(N,examples,args):
-    global data_loader
+def prep_data_nnue(data_loader,N,examples,args):
 
     iplanes0 = np.zeros(shape=(N*192,2), dtype=np.int32)
     ivalues0 = np.zeros(shape=(N*192), dtype=np.int8)
@@ -925,18 +911,24 @@ def prep_data_nnue(N,examples,args):
     x = (iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1])
     y = (oval)
 
-    #construct sparse matrix
-    if HEAD_TYPE == 3:
-        dense_shape = (N,NNUE_FEATURES)
-        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
-        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
-        x = (x1, x2)
-
     return x,y
 
-def get_batch(myNet,args,myEpd,start):
+def get_batch(myNet,args,start):
 
-    with (open(myEpd) if not args.gzip else gzip.open(myEpd,mode='rt')) as file:
+    if use_data_loader:
+        data_loader = cdll.LoadLibrary("data_loader/data_loader.so")
+        data_loader.generate_input_nnue.restype = None
+        data_loader.generate_input_nnue.argtypes = [
+            c_char_p,
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
+            POINTER(c_int),
+            POINTER(c_int) ]
+
+    with (open(args.epd) if not args.gzip else gzip.open(args.epd,mode='rt')) as file:
         count = 0
 
         examples = []
@@ -970,7 +962,7 @@ def get_batch(myNet,args,myEpd,start):
                 N = len(examples)
                 if N > 0:
                     if use_data_loader:
-                        x,y = prep_data_nnue(N,examples,args)
+                        x,y = prep_data_nnue(data_loader, N,examples,args)
                     else:
                         x,y = prep_data(N,examples,args)
                     examples = []
@@ -980,27 +972,60 @@ def get_batch(myNet,args,myEpd,start):
             if not line:
                 break
 
+class MyExecutor(Executor):
+
+    def __init__(self,queue,myNet,args,startid):
+        Executor.__init__(self)
+        self.queue = queue
+        self.myNet = myNet
+        self.args = args
+        self.startid = startid
+
+    def run(self):
+        gen = get_batch(self.myNet,self.args,self.startid)
+        while True:
+            if self.queue.empty():
+                try:
+                    self.queue.put(next(gen))
+                except StopIteration:
+                    break
+            else:
+                pass
+
 def train_epd(myNet,args,myEpd,nid,start=1):
-    gen = get_batch(myNet,args,myEpd,start)
-    myNet.train(gen,nid*args.rsav,args)
+    queue = mp.Queue()
+    p1 = MyExecutor(queue,myNet,args,start)
+    p1.start()
+
+    initial_steps = args.global_steps + nid * args.rsav
+    steps = 0
+
+    while True:
+        p1.join(timeout=0)
+        if p1.is_alive():
+            x,y = queue.get()
+        else:
+            break
+
+        myNet.train(x,y,steps,steps+initial_steps,args)
+        del x,y
+
+        nid = (steps + 1) // args.rsav
+        if (steps + 1) % args.rsavo == 0:
+            myNet.save_checkpoint(nid, args, True)
+        elif (steps + 1) % args.rsav == 0:
+            myNet.save_checkpoint(nid, args, False)
+
+        if steps >= args.max_steps:
+            break
+
+        steps = steps + 1
+
+    p1.terminate()
 
 def main(argv):
     global AUX_INP, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
     global POLICY_CHANNELS,  BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
-
-    if use_data_loader:
-        global data_loader
-        data_loader = cdll.LoadLibrary("data_loader/data_loader.so")
-        data_loader.generate_input_nnue.restype = None
-        data_loader.generate_input_nnue.argtypes = [
-            c_char_p,
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
-            POINTER(c_int),
-            POINTER(c_int) ]
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epd','-e', dest='epd', required=False, help='Path to labeled EPD file for training')
