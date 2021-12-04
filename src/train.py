@@ -894,8 +894,8 @@ def prep_data(N,examples,args):
     #construct sparse matrix
     if HEAD_TYPE == 3:
         dense_shape = (N,NNUE_FEATURES)
-        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
-        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
+        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
+        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
         x = (x1, x2)
 
     return x,y
@@ -904,9 +904,9 @@ def prep_data_nnue(N,examples,args):
     global data_loader
 
     iplanes0 = np.zeros(shape=(N*192,2), dtype=np.int32)
-    ivalues0 = np.zeros(shape=(N*192), dtype=np.int32)
+    ivalues0 = np.zeros(shape=(N*192), dtype=np.int8)
     iplanes1 = np.zeros(shape=(N*192,2), dtype=np.int32)
-    ivalues1 = np.zeros(shape=(N*192), dtype=np.int32)
+    ivalues1 = np.zeros(shape=(N*192), dtype=np.int8)
     oval = np.zeros(shape=(N,),dtype=np.float32)
     cidx0 = c_int()
     cidx1 = c_int()
@@ -928,8 +928,8 @@ def prep_data_nnue(N,examples,args):
     #construct sparse matrix
     if HEAD_TYPE == 3:
         dense_shape = (N,NNUE_FEATURES)
-        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2],dense_shape))
-        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3],dense_shape))
+        x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
+        x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
         x = (x1, x2)
 
     return x,y
@@ -995,9 +995,9 @@ def main(argv):
         data_loader.generate_input_nnue.argtypes = [
             c_char_p,
             np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
             np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
+            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
             np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
             POINTER(c_int),
             POINTER(c_int) ]

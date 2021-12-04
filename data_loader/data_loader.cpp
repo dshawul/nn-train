@@ -119,8 +119,8 @@ int decode_fen(const char* fen_str, int* player, int* castle,
 void fill_input_planes(
         int player, int cast, int fifty, int hply, int epsquare, bool flip_h, int hist,
         int* const draw, int* const piece, int* const square, float* data, int nn_type_,
-        int* const __restrict indices0, int* const __restrict values0,
-        int* const __restrict indices1, int* const __restrict values1,
+        int* const __restrict indices0, int8_t* const __restrict values0,
+        int* const __restrict indices1, int8_t* const __restrict values1,
         int* const cidx0, int* const cidx1,
         int pid)
 {
@@ -398,7 +398,8 @@ void fill_input_planes(
             if(flip_file) f = FILEH - f;
             int kindex = KINDEX[r * 4 + (f - FILEE)];
 
-            int* indices = indices0, *values = values0, *cidx = cidx0; 
+            int* indices = indices0, *cidx = cidx0;
+            int8_t *values = values0;
             int rows[6][8] = {0}, cols[6][8] = {0}, ring[6][4] = {0};
             int bishop_dark = 0, knight_dark = 0, pawn_dark = 0, pawn_ring_2_dark = 0;
             int bishop_a1h8 = 0, bishop_a8h1 = 0, bishop_a1h8n = 0, bishop_a8h1n = 0;
@@ -495,7 +496,8 @@ void fill_input_planes(
             if(flip_file) f = FILEH - f;
             int kindex = KINDEX[r * 4 + (f - FILEE)];
 
-            int* indices = indices1, *values = values1, *cidx = cidx1; 
+            int* indices = indices1, *cidx = cidx1;
+            int8_t* values = values1;
             int rows[6][8] = {0}, cols[6][8] = {0}, ring[6][4] = {0};
             int bishop_dark = 0, knight_dark = 0, pawn_dark = 0, pawn_ring_2_dark = 0;
             int bishop_a1h8 = 0, bishop_a8h1 = 0, bishop_a1h8n = 0, bishop_a8h1n = 0;
@@ -653,8 +655,8 @@ void init_input_planes() {
  * fill planes
  */
 void fill_data(const char* fen, float* iplanes, int nn_type_,
-        int* const __restrict indices0, int* const __restrict values0,
-        int* const __restrict indices1, int* const __restrict values1,
+        int* const __restrict indices0, int8_t* const __restrict values0,
+        int* const __restrict indices1, int8_t* const __restrict values1,
         float* const __restrict oval,
         int* const cidx0, int* const cidx1,
         int pid
@@ -702,8 +704,8 @@ bool EPD::next(char* moves, bool silent) {
  * process epd string
  */
 DLLExport void _CDECL generate_input_nnue(const char* sdata,
-        int* const __restrict indices0, int* const __restrict values0,
-        int* const __restrict indices1, int* const __restrict values1,
+        int* const __restrict indices0, int8_t* const __restrict values0,
+        int* const __restrict indices1, int8_t* const __restrict values1,
         float* const __restrict oval,
         int* const cidx0, int* const cidx1
         ) {
@@ -749,8 +751,8 @@ int main() {
     //---generate input planes
     int* indices0 = new int[N * 192 * 2];
     int* indices1 = new int[N * 192 * 2];
-    int* values0 = new int[N * 192];
-    int* values1 = new int[N * 192];
+    int8_t* values0 = new int8_t[N * 192];
+    int8_t* values1 = new int8_t[N * 192];
     float* oval = new float[N];
     int cidx0, cidx1;
 
