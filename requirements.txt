@@ -2,8 +2,7 @@ python_chess==0.23.11
 joblib==0.11
 numpy==1.19.5
 chess==1.6.1
-tensorflow==2.7.0
-tensorflow-gpu==2.7.0
-tensorboard==2.7.0
-tensorrt==6.0.1.5
+tensorflow==2.6.1
+keras==2.6.0
 matplotlib==3.5.0
+uff==0.6.9
