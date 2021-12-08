@@ -9,7 +9,9 @@
 
 
 enum {DEFAULT, LCZERO, SIMPLE, QLEARN, NNUE, NONET = -1};
-static const int net_channels[] = {32, 112, 12, 32, 16*12+12+2, 0};
+static const int NNUE_FACTORIZER = 12;
+static const int NNUE_FACTORIZER_EXTRA = 2;
+static const int net_channels[] = {32, 112, 12, 32, 16*12+NNUE_FACTORIZER+NNUE_FACTORIZER_EXTRA, 0};
 static const int nn_type = NNUE;
 static const int CHANNELS = net_channels[nn_type];
 #define USE_CHW      0
@@ -416,65 +418,70 @@ void fill_input_planes(
 
                 int ix = pc - 1;
                 SD(sq,(kindex*12+ix),1);
-                SD(sq,(16*12+ix),1);
 
-                if( ix < 6) {
-                    f = file(sq);
-                    r = rank(sq);
+                if (NNUE_FACTORIZER) {
+                    SD(sq,(16*12+ix),1);
 
-                    rows[ix][f]++;
-                    cols[ix][r]++;
-                    ring[ix][0]++;
-                    if(r >= 1 && r < 7 && f >= 1 && f < 7)
-                        ring[ix][1]++;
-                    if(r >= 2 && r < 6 && f >= 2 && f < 6)
-                        ring[ix][2]++;
-                    if(r >= 3 && r < 5 && f >= 3 && f < 5)
-                        ring[ix][3]++;
+                    if(NNUE_FACTORIZER_EXTRA && ix < 6) {
+                        f = file(sq);
+                        r = rank(sq);
 
-                    if((r + f) % 2 == 0) {
-                        if(ix == 3)
-                            bishop_dark++;
-                        if(ix == 4)
-                            knight_dark++;
-                        if(ix == 5) {
-                            pawn_dark++;
-                            if(r >= 2 && r < 6 && f >= 2 && f < 6)
-                                pawn_ring_2_dark++;
+                        rows[ix][f]++;
+                        cols[ix][r]++;
+                        ring[ix][0]++;
+                        if(r >= 1 && r < 7 && f >= 1 && f < 7)
+                            ring[ix][1]++;
+                        if(r >= 2 && r < 6 && f >= 2 && f < 6)
+                            ring[ix][2]++;
+                        if(r >= 3 && r < 5 && f >= 3 && f < 5)
+                            ring[ix][3]++;
+
+                        if((r + f) % 2 == 0) {
+                            if(ix == 3)
+                                bishop_dark++;
+                            if(ix == 4)
+                                knight_dark++;
+                            if(ix == 5) {
+                                pawn_dark++;
+                                if(r >= 2 && r < 6 && f >= 2 && f < 6)
+                                    pawn_ring_2_dark++;
+                            }
+                        }
+
+                        if(ix == 3) {
+                            if(r == f)
+                                bishop_a1h8++; 
+                            if(r + f == 7)
+                                bishop_a8h1++;  
+                            if(r == f + 1 || r + 1 == f)
+                                bishop_a1h8n++;  
+                            if(r + f == 6 || r + f == 8)
+                                bishop_a8h1n++;  
                         }
                     }
-
-                    if(ix == 3) {
-                        if(r == f)
-                            bishop_a1h8++; 
-                        if(r + f == 7)
-                            bishop_a8h1++;  
-                        if(r == f + 1 || r + 1 == f)
-                            bishop_a1h8n++;  
-                        if(r + f == 6 || r + f == 8)
-                            bishop_a8h1n++;  
+                }
+            }
+            if(NNUE_FACTORIZER_EXTRA) {
+                for(int ix = 0; ix < 6; ix++) {
+                    for(int i = 0; i < 8; i++) {
+                        SD(SQ(ix, i), (17*12+0), rows[ix][i]);
+                        SD(SQ(ix, i), (17*12+1), cols[ix][i]);
                     }
+                    SD(SQ(6, ix), (17*12+0), ring[ix][0]);
+                    SD(SQ(7, ix), (17*12+0), ring[ix][1]);
+                    SD(SQ(6, ix), (17*12+1), ring[ix][2]);
+                    SD(SQ(7, ix), (17*12+1), ring[ix][3]);
                 }
-            }
-            for(int ix = 0; ix < 6; ix++) {
-                for(int i = 0; i < 8; i++) {
-                    SD(SQ(ix, i), (17*12+0), rows[ix][i]);
-                    SD(SQ(ix, i), (17*12+1), cols[ix][i]);
-                }
-                SD(SQ(6, ix), (17*12+0), ring[ix][0]);
-                SD(SQ(7, ix), (17*12+0), ring[ix][1]);
-                SD(SQ(6, ix), (17*12+1), ring[ix][2]);
-                SD(SQ(7, ix), (17*12+1), ring[ix][3]);
-            }
 
-            SD(SQ(6, 6), (17*12+0), bishop_dark);
-            SD(SQ(6, 7), (17*12+0), knight_dark);
-            SD(SQ(7, 6), (17*12+0), pawn_dark);
-            SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
-            SD(SQ(6, 6), (17*12+1), bishop_a1h8);
-            SD(SQ(6, 7), (17*12+1), bishop_a8h1);
-            SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
-            SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+                SD(SQ(6, 6), (17*12+0), bishop_dark);
+                SD(SQ(6, 7), (17*12+0), knight_dark);
+                SD(SQ(7, 6), (17*12+0), pawn_dark);
+                SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
+                SD(SQ(6, 6), (17*12+1), bishop_a1h8);
+                SD(SQ(6, 7), (17*12+1), bishop_a8h1);
+                SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
+                SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+            }
         }
 
         //shift data array
@@ -514,65 +521,70 @@ void fill_input_planes(
 
                 int ix = pc - 1;
                 SD(sq,(kindex*12+ix),1);
-                SD(sq,(16*12+ix),1);
 
-                if( ix < 6) {
-                    f = file(sq);
-                    r = rank(sq);
+                if (NNUE_FACTORIZER) {
+                    SD(sq,(16*12+ix),1);
 
-                    rows[ix][f]++;
-                    cols[ix][r]++;
-                    ring[ix][0]++;
-                    if(r >= 1 && r < 7 && f >= 1 && f < 7)
-                        ring[ix][1]++;
-                    if(r >= 2 && r < 6 && f >= 2 && f < 6)
-                        ring[ix][2]++;
-                    if(r >= 3 && r < 5 && f >= 3 && f < 5)
-                        ring[ix][3]++;
+                    if(NNUE_FACTORIZER_EXTRA && ix < 6) {
+                        f = file(sq);
+                        r = rank(sq);
 
-                    if((r + f) % 2 == 0) {
-                        if(ix == 3)
-                            bishop_dark++;
-                        if(ix == 4)
-                            knight_dark++;
-                        if(ix == 5) {
-                            pawn_dark++;
-                            if(r >= 2 && r < 6 && f >= 2 && f < 6)
-                                pawn_ring_2_dark++;
+                        rows[ix][f]++;
+                        cols[ix][r]++;
+                        ring[ix][0]++;
+                        if(r >= 1 && r < 7 && f >= 1 && f < 7)
+                            ring[ix][1]++;
+                        if(r >= 2 && r < 6 && f >= 2 && f < 6)
+                            ring[ix][2]++;
+                        if(r >= 3 && r < 5 && f >= 3 && f < 5)
+                            ring[ix][3]++;
+
+                        if((r + f) % 2 == 0) {
+                            if(ix == 3)
+                                bishop_dark++;
+                            if(ix == 4)
+                                knight_dark++;
+                            if(ix == 5) {
+                                pawn_dark++;
+                                if(r >= 2 && r < 6 && f >= 2 && f < 6)
+                                    pawn_ring_2_dark++;
+                            }
+                        }
+
+                        if(ix == 3) {
+                            if(r == f)
+                                bishop_a1h8++; 
+                            if(r + f == 7)
+                                bishop_a8h1++;  
+                            if(r == f + 1 || r + 1 == f)
+                                bishop_a1h8n++;  
+                            if(r + f == 6 || r + f == 8)
+                                bishop_a8h1n++;  
                         }
                     }
-
-                    if(ix == 3) {
-                        if(r == f)
-                            bishop_a1h8++; 
-                        if(r + f == 7)
-                            bishop_a8h1++;  
-                        if(r == f + 1 || r + 1 == f)
-                            bishop_a1h8n++;  
-                        if(r + f == 6 || r + f == 8)
-                            bishop_a8h1n++;  
+                }
+            }
+            if(NNUE_FACTORIZER_EXTRA) {
+                for(int ix = 0; ix < 6; ix++) {
+                    for(int i = 0; i < 8; i++) {
+                        SD(SQ(ix, i), (17*12+0), rows[ix][i]);
+                        SD(SQ(ix, i), (17*12+1), cols[ix][i]);
                     }
+                    SD(SQ(6, ix), (17*12+0), ring[ix][0]);
+                    SD(SQ(7, ix), (17*12+0), ring[ix][1]);
+                    SD(SQ(6, ix), (17*12+1), ring[ix][2]);
+                    SD(SQ(7, ix), (17*12+1), ring[ix][3]);
                 }
-            }
-            for(int ix = 0; ix < 6; ix++) {
-                for(int i = 0; i < 8; i++) {
-                    SD(SQ(ix, i), (17*12+0), rows[ix][i]);
-                    SD(SQ(ix, i), (17*12+1), cols[ix][i]);
-                }
-                SD(SQ(6, ix), (17*12+0), ring[ix][0]);
-                SD(SQ(7, ix), (17*12+0), ring[ix][1]);
-                SD(SQ(6, ix), (17*12+1), ring[ix][2]);
-                SD(SQ(7, ix), (17*12+1), ring[ix][3]);
-            }
 
-            SD(SQ(6, 6), (17*12+0), bishop_dark);
-            SD(SQ(6, 7), (17*12+0), knight_dark);
-            SD(SQ(7, 6), (17*12+0), pawn_dark);
-            SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
-            SD(SQ(6, 6), (17*12+1), bishop_a1h8);
-            SD(SQ(6, 7), (17*12+1), bishop_a8h1);
-            SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
-            SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+                SD(SQ(6, 6), (17*12+0), bishop_dark);
+                SD(SQ(6, 7), (17*12+0), knight_dark);
+                SD(SQ(7, 6), (17*12+0), pawn_dark);
+                SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
+                SD(SQ(6, 6), (17*12+1), bishop_a1h8);
+                SD(SQ(6, 7), (17*12+1), bishop_a8h1);
+                SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
+                SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+            }
         }
         data = sdata;
 

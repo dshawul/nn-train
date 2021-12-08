@@ -105,12 +105,14 @@ def save_weights(m,name):
 
                     plt.figure(figsize=(20, 10))
 
+                    n_plots = 1 + (1 if NNUE_FACTORIZER else 0) + (1 if NNUE_FACTORIZER_EXTRA else 0)
+
                     #no factorizer
                     for k in range(64):
                         for i in range(NNUE_KINDICES):
                             for j in range(12):
                                 wm[k*NNUE_KINDICES*12+i*12+j,:] =  wi[k*NNUE_CHANNELS+i*12+j,:]
-                    plt.subplot(1,3,1)
+                    plt.subplot(1,n_plots,1)
                     plot(wm,'plain')
 
                     #k-psqt factorizer
@@ -119,7 +121,7 @@ def save_weights(m,name):
                             for i in range(NNUE_KINDICES):
                                 for j in range(12):
                                     wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
-                        plt.subplot(1,3,2)
+                        plt.subplot(1,n_plots,2)
                         plot(wm,'kpsqt')
 
                     #file,rank,and 4 rings factorizors
@@ -158,8 +160,8 @@ def save_weights(m,name):
                                             wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
                                         if r + f == 6 or r + f == 8:
                                             wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
-                    plt.subplot(1,3,3)
-                    plot(wm,'material')
+                        plt.subplot(1,n_plots,3)
+                        plot(wm,'material')
 
                     has_plot = True
 
