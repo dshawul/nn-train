@@ -18,6 +18,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 SAVE_BIN = False
 VERSION = 0
+PLOT = False
 
 def freeze_model(model):
     from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
@@ -59,10 +60,13 @@ def copy_weights(m1,m2):
                 w2[k] = w1[k].reshape(w2[k].shape)
             layer2.set_weights(w2)
 
-def plot(wm,name="",scale=8):
+def plot(wm,scale=8):
     """
     Plot weights
     """
+    if not PLOT:
+        return
+
     nr, nc = NNUE_KINDICES*8, 12*8
     wc = np.zeros(shape=(nr,nc,3), dtype=np.float32)
     for k in range(64):
@@ -76,8 +80,8 @@ def plot(wm,name="",scale=8):
                 for m in range(84):
                     b += wm[k*NNUE_KINDICES*12+i*12+j,m+172]*scale
                 r, g, b = r/4, g/4, b/4
+                r, g, b = 1-r, 1-g, 1-b
                 wc[(NNUE_KINDICES-1-i)*8 + (7-k//8), (j*8)+k%8, :] = [r,g,b]
-                # print(r,g,b)
 
     im = plt.imshow(wc, interpolation='none')
     plt.colorbar(im,orientation="horizontal", fraction=0.046, pad=0.04)
@@ -101,31 +105,36 @@ def save_weights(m,name):
                 if wi.shape == (NNUE_FEATURES, 256) and NNUE_KINDICES > 1:
                     win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, 256),1,0)
                     wm = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
+                    wms = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
 
-                    plt.figure(figsize=(20, 10))
+                    plt.figure(figsize=(40, 10))
 
-                    n_plots = 1 + (1 if NNUE_FACTORIZER else 0) + (1 if NNUE_FACTORIZER_EXTRA else 0)
+                    n_plots = 2 + (1 if NNUE_FACTORIZER else 0) + (2 if NNUE_FACTORIZER_EXTRA else 0)
 
                     #no factorizer
                     for k in range(64):
                         for i in range(NNUE_KINDICES):
                             for j in range(12):
                                 wm[k*NNUE_KINDICES*12+i*12+j,:] =  wi[k*NNUE_CHANNELS+i*12+j,:]
-                    plt.subplot(1,n_plots,1)
-                    plot(wm,'plain')
+                    ax = plt.subplot(1,n_plots,1)
+                    ax.title.set_text('plain')
+                    plot(wm)
 
                     #k-psqt factorizer
                     if NNUE_FACTORIZER > 0:
+                        wms = np.copy(wm)
                         for k in range(64):
                             for i in range(NNUE_KINDICES):
                                 for j in range(12):
                                     wm[k*NNUE_KINDICES*12+i*12+j,:] += wi[k*NNUE_CHANNELS+NNUE_KINDICES*12+j,:]
-                        plt.subplot(1,n_plots,2)
-                        plot(wm,'kpsqt')
+                        ax = plt.subplot(1,n_plots,2)
+                        ax.title.set_text('king factorizer')
+                        plot(np.subtract(wm,wms))
 
                     #file,rank,and 4 rings factorizors
                     if NNUE_FACTORIZER_EXTRA > 0:
+                        wms = np.copy(wm)
                         ch = (NNUE_KINDICES+1)*12
                         for k in range(64):
                             f = k % 8
@@ -134,8 +143,7 @@ def save_weights(m,name):
                                 for j in range(6):
                                     wm[k*NNUE_KINDICES*12+i*12+j,:] += \
                                         win[ch+0,j*8+f,:] + \
-                                        win[ch+1,j*8+r,:] + \
-                                        win[ch+0,6*8+j,:]
+                                        win[ch+1,j*8+r,:]
                                     if r >= 1 and r < 7 and f >= 1 and f < 7:
                                         wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+0,7*8+j,:]
                                     if r >= 2 and r < 6 and f >= 2 and f < 6:
@@ -160,8 +168,26 @@ def save_weights(m,name):
                                             wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+6,:]
                                         if r + f == 6 or r + f == 8:
                                             wm[k*NNUE_KINDICES*12+i*12+j,:] += win[ch+1,7*8+7,:]
-                        plt.subplot(1,n_plots,3)
-                        plot(wm,'material')
+                        ax = plt.subplot(1,n_plots,3)
+                        ax.title.set_text('rfdc factorizers')
+                        plot(np.subtract(wm,wms))
+
+                        #material
+                        wms = np.copy(wm)
+                        for k in range(64):
+                            for i in range(NNUE_KINDICES):
+                                for j in range(6):
+                                    wm[k*NNUE_KINDICES*12+i*12+j,:] += \
+                                        win[ch+0,6*8+j,:]
+                        ax = plt.subplot(1,n_plots,4)
+                        ax.title.set_text('material factorizer')
+                        plot(np.subtract(wm,wms),scale=4)
+
+                        #total
+                        ax = plt.subplot(1,n_plots,5)
+                        ax.title.set_text('total')
+                        plot(wm,scale=4)
+
 
                     has_plot = True
 
