@@ -36,7 +36,7 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
-use_data_loader = True
+USE_LOADER = True
 
 #NNUE
 NNUE_KIDX = 4
@@ -917,7 +917,7 @@ def prep_data_nnue(data_loader,N,examples,args):
 
 def get_batch(myNet,args,start):
 
-    if use_data_loader:
+    if USE_LOADER:
         data_loader = cdll.LoadLibrary("data_loader/data_loader.so")
         data_loader.generate_input_nnue.restype = None
         data_loader.generate_input_nnue.argtypes = [
@@ -963,7 +963,7 @@ def get_batch(myNet,args,start):
                 #prep ML data
                 N = len(examples)
                 if N > 0:
-                    if use_data_loader:
+                    if USE_LOADER:
                         x,y = prep_data_nnue(data_loader, N,examples,args)
                     else:
                         x,y = prep_data(N,examples,args)
@@ -976,39 +976,33 @@ def get_batch(myNet,args,start):
 
 class MyExecutor(Executor):
 
-    def __init__(self,queue,myNet,args,startid):
+    def __init__(self,queue,gen):
         Executor.__init__(self)
         self.queue = queue
-        self.myNet = myNet
-        self.args = args
-        self.startid = startid
+        self.gen = gen
 
     def run(self):
-        gen = get_batch(self.myNet,self.args,self.startid)
         while True:
             if self.queue.empty():
                 try:
-                    self.queue.put(next(gen))
+                    self.queue.put(next(self.gen))
                 except StopIteration:
                     break
             else:
                 pass
 
 def train_epd(myNet,args,myEpd,nid,start=1):
+    gen = get_batch(myNet,args,start)
+    x,y = next(gen)
+
     queue = mp.Queue()
-    p1 = MyExecutor(queue,myNet,args,start)
+    p1 = MyExecutor(queue,gen)
     p1.start()
 
     initial_steps = args.global_steps + nid * args.rsav
     steps = 0
 
     while True:
-        p1.join(timeout=0)
-        if p1.is_alive():
-            x,y = queue.get()
-        else:
-            break
-
         myNet.train(x,y,steps,steps+initial_steps,args)
         del x,y
 
@@ -1017,6 +1011,12 @@ def train_epd(myNet,args,myEpd,nid,start=1):
             myNet.save_checkpoint(nid, args, True)
         elif (steps + 1) % args.rsav == 0:
             myNet.save_checkpoint(nid, args, False)
+
+        p1.join(timeout=0)
+        if p1.is_alive():
+            x,y = queue.get()
+        else:
+            break
 
         if steps >= args.max_steps:
             break
