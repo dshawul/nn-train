@@ -509,8 +509,9 @@ def fill_examples(examples, spid):
     #arrays
     N = len(examples)
     if HEAD_TYPE == 3:
-        iplanes = np.zeros(shape=(2,N*192,2), dtype=np.int32)
-        ivalues = np.zeros(shape=(2,N*192), dtype=np.int8)
+        S = 32 + (32 if NNUE_FACTORIZER else 0) + NNUE_FACTORIZER_EXTRA * 64
+        iplanes = np.zeros(shape=(2,N*S,2), dtype=np.int32)
+        ivalues = np.zeros(shape=(2,N*S), dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     oresult = np.zeros(shape=(N,),dtype=np.int8)
@@ -889,10 +890,11 @@ def prep_data(N,examples,args):
 
 def prep_data_nnue(data_loader,N,examples,args):
 
-    iplanes0 = np.zeros(shape=(N*192,2), dtype=np.int32)
-    ivalues0 = np.zeros(shape=(N*192), dtype=np.int8)
-    iplanes1 = np.zeros(shape=(N*192,2), dtype=np.int32)
-    ivalues1 = np.zeros(shape=(N*192), dtype=np.int8)
+    S = 32 + (32 if NNUE_FACTORIZER else 0) + NNUE_FACTORIZER_EXTRA * 64
+    iplanes0 = np.zeros(shape=(N*S,2), dtype=np.int32)
+    ivalues0 = np.zeros(shape=(N*S), dtype=np.int8)
+    iplanes1 = np.zeros(shape=(N*S,2), dtype=np.int32)
+    ivalues1 = np.zeros(shape=(N*S), dtype=np.int8)
     oval = np.zeros(shape=(N,),dtype=np.float32)
     cidx0 = c_int()
     cidx1 = c_int()
