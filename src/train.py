@@ -1012,13 +1012,13 @@ def train_epd(myNet,args,myEpd,nid,start=1):
         elif (steps + 1) % args.rsav == 0:
             myNet.save_checkpoint(nid, args, False)
 
+        if (steps + 1) >= args.max_steps:
+            break
+
         p1.join(timeout=0)
         if p1.is_alive():
             x,y = queue.get()
         else:
-            break
-
-        if steps >= args.max_steps:
             break
 
         steps = steps + 1

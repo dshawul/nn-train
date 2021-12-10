@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 SAVE_BIN = False
 VERSION = 0
-PLOT = False
+PLOT = True
 
 def freeze_model(model):
     from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
@@ -73,14 +73,10 @@ def plot(wm,scale=8):
         for i in range(NNUE_KINDICES):
             for j in range(12):
                 r, g, b = 2.0, 2.0, 2.0
-                for m in range(86):
-                    r += wm[k*NNUE_KINDICES*12+i*12+j,m]*scale
-                for m in range(86):
-                    g += wm[k*NNUE_KINDICES*12+i*12+j,m+86]*scale
-                for m in range(84):
-                    b += wm[k*NNUE_KINDICES*12+i*12+j,m+172]*scale
-                r, g, b = r/4, g/4, b/4
-                r, g, b = 1-r, 1-g, 1-b
+                r += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,:86])*scale
+                g += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,86:172])*scale
+                b += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,172:])*scale
+                r, g, b = 1-r/4, 1-g/4, 1-b/4
                 wc[(NNUE_KINDICES-1-i)*8 + (7-k//8), (j*8)+k%8, :] = [r,g,b]
 
     im = plt.imshow(wc, interpolation='none')
