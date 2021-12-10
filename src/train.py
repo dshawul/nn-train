@@ -771,6 +771,7 @@ class NNet():
 
         #create training model]
         fname = filepath  + "-model-" + str(args.net)
+        exists = os.path.exists(fname)
         if not os.path.exists(fname):
             mdx = self.new_model(args)
             self.compile_model(mdx, args)
@@ -800,6 +801,7 @@ class NNet():
             update_freq=args.rsav
         )
         self.tensorboard.set_model(self.model)
+        return exists
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
@@ -1095,7 +1097,6 @@ def main(argv):
     nid = args.id
 
     #save inference graphs
-    exists = os.path.exists(args.dir)
     myNet.save_infer_graph(args)
 
     #initialize mixed precision training
@@ -1107,7 +1108,7 @@ def main(argv):
 
     #load networks
     print("Loading network: " + str(args.net))
-    myNet.load_checkpoint(nid, args)
+    exists = myNet.load_checkpoint(nid, args)
 
     if args.rand:
         myNet.save_checkpoint(nid, args, True)
