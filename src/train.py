@@ -781,6 +781,9 @@ class NNet():
             if not mdx.optimizer:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
+            else:
+                print("Setting learning rate: " + str(args.lr))
+                mdx.optimizer.lr.assign(args.lr)
         self.model = mdx
 
         #common callbacks list
@@ -1008,13 +1011,15 @@ def train_epd(myNet,args,myEpd,nid,start=1):
         myNet.train(x,y,steps,steps+initial_steps,args)
         del x,y
 
-        nid = (steps + 1) // args.rsav
-        if (steps + 1) % args.rsavo == 0:
+        steps = steps + 1
+
+        nid = steps // args.rsav
+        if steps % args.rsavo == 0:
             myNet.save_checkpoint(nid, args, True)
-        elif (steps + 1) % args.rsav == 0:
+        elif steps % args.rsav == 0:
             myNet.save_checkpoint(nid, args, False)
 
-        if (steps + 1) >= args.max_steps:
+        if steps >= args.max_steps:
             break
 
         p1.join(timeout=0)
@@ -1022,8 +1027,6 @@ def train_epd(myNet,args,myEpd,nid,start=1):
             x,y = queue.get()
         else:
             break
-
-        steps = steps + 1
 
     p1.terminate()
 

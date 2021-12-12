@@ -76,7 +76,7 @@ def plot(wm,scale=8):
                 r += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,:86])*scale
                 g += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,86:172])*scale
                 b += np.sum(wm[k*NNUE_KINDICES*12+i*12+j,172:])*scale
-                r, g, b = 1-r/4, 1-g/4, 1-b/4
+                r, g, b = max(0,min(1,1-r/4)), max(0,min(1,1-g/4)), max(0,min(1,1-b/4))
                 wc[(NNUE_KINDICES-1-i)*8 + (7-k//8), (j*8)+k%8, :] = [r,g,b]
 
     im = plt.imshow(wc, interpolation='none')
@@ -184,12 +184,10 @@ def save_weights(m,name):
                         ax.title.set_text('total')
                         plot(wm,scale=4)
 
-
                     has_plot = True
 
                 if has_plot:
                     plt.savefig('weights.png')
-                    # plt.show()
 
                 #save weiights
                 wf = wm.flatten()
