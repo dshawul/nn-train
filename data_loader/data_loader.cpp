@@ -7,16 +7,17 @@
 #include "data_loader.h"
 #undef DLL_EXPORT
 
+#define USE_CHW      0
+#define USE_SPARSE   1
+#define N_K_INDICES 16
 
 enum {DEFAULT, LCZERO, SIMPLE, QLEARN, NNUE, NONET = -1};
 static const int NNUE_FACTORIZER = 12;
 static const int NNUE_FACTORIZER_EXTRA = 2;
-static const int net_channels[] = {32, 112, 12, 32, 16*12+NNUE_FACTORIZER+NNUE_FACTORIZER_EXTRA, 0};
+static const int net_channels[] = {32, 112, 12, 32, N_K_INDICES*12+NNUE_FACTORIZER+NNUE_FACTORIZER_EXTRA, 0};
 static const int nn_type = NNUE;
 static const int CHANNELS = net_channels[nn_type];
-#define USE_CHW      0
-#define USE_SPARSE   1
-#define N_K_INDICES 16
+
 
 /*
    Decode fen
@@ -420,7 +421,7 @@ void fill_input_planes(
                 SD(sq,(kindex*12+ix),1);
 
                 if (NNUE_FACTORIZER) {
-                    SD(sq,(16*12+ix),1);
+                    SD(sq,(N_K_INDICES*12+ix),1);
 
                     if(NNUE_FACTORIZER_EXTRA && ix < 6) {
                         f = file(sq);
@@ -464,23 +465,23 @@ void fill_input_planes(
             if(NNUE_FACTORIZER_EXTRA) {
                 for(int ix = 0; ix < 6; ix++) {
                     for(int i = 0; i < 8; i++) {
-                        SD(SQ(ix, i), (17*12+0), rows[ix][i]);
-                        SD(SQ(ix, i), (17*12+1), cols[ix][i]);
+                        SD(SQ(ix, i), ((N_K_INDICES+1)*12+0), rows[ix][i]);
+                        SD(SQ(ix, i), ((N_K_INDICES+1)*12+1), cols[ix][i]);
                     }
-                    SD(SQ(6, ix), (17*12+0), ring[ix][0]);
-                    SD(SQ(7, ix), (17*12+0), ring[ix][1]);
-                    SD(SQ(6, ix), (17*12+1), ring[ix][2]);
-                    SD(SQ(7, ix), (17*12+1), ring[ix][3]);
+                    SD(SQ(6, ix), ((N_K_INDICES+1)*12+0), ring[ix][0]);
+                    SD(SQ(7, ix), ((N_K_INDICES+1)*12+0), ring[ix][1]);
+                    SD(SQ(6, ix), ((N_K_INDICES+1)*12+1), ring[ix][2]);
+                    SD(SQ(7, ix), ((N_K_INDICES+1)*12+1), ring[ix][3]);
                 }
 
-                SD(SQ(6, 6), (17*12+0), bishop_dark);
-                SD(SQ(6, 7), (17*12+0), knight_dark);
-                SD(SQ(7, 6), (17*12+0), pawn_dark);
-                SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
-                SD(SQ(6, 6), (17*12+1), bishop_a1h8);
-                SD(SQ(6, 7), (17*12+1), bishop_a8h1);
-                SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
-                SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+                SD(SQ(6, 6), ((N_K_INDICES+1)*12+0), bishop_dark);
+                SD(SQ(6, 7), ((N_K_INDICES+1)*12+0), knight_dark);
+                SD(SQ(7, 6), ((N_K_INDICES+1)*12+0), pawn_dark);
+                SD(SQ(7, 7), ((N_K_INDICES+1)*12+0), pawn_ring_2_dark);
+                SD(SQ(6, 6), ((N_K_INDICES+1)*12+1), bishop_a1h8);
+                SD(SQ(6, 7), ((N_K_INDICES+1)*12+1), bishop_a8h1);
+                SD(SQ(7, 6), ((N_K_INDICES+1)*12+1), bishop_a1h8n);
+                SD(SQ(7, 7), ((N_K_INDICES+1)*12+1), bishop_a8h1n);
             }
         }
 
@@ -523,7 +524,7 @@ void fill_input_planes(
                 SD(sq,(kindex*12+ix),1);
 
                 if (NNUE_FACTORIZER) {
-                    SD(sq,(16*12+ix),1);
+                    SD(sq,(N_K_INDICES*12+ix),1);
 
                     if(NNUE_FACTORIZER_EXTRA && ix < 6) {
                         f = file(sq);
@@ -567,23 +568,23 @@ void fill_input_planes(
             if(NNUE_FACTORIZER_EXTRA) {
                 for(int ix = 0; ix < 6; ix++) {
                     for(int i = 0; i < 8; i++) {
-                        SD(SQ(ix, i), (17*12+0), rows[ix][i]);
-                        SD(SQ(ix, i), (17*12+1), cols[ix][i]);
+                        SD(SQ(ix, i), ((N_K_INDICES+1)*12+0), rows[ix][i]);
+                        SD(SQ(ix, i), ((N_K_INDICES+1)*12+1), cols[ix][i]);
                     }
-                    SD(SQ(6, ix), (17*12+0), ring[ix][0]);
-                    SD(SQ(7, ix), (17*12+0), ring[ix][1]);
-                    SD(SQ(6, ix), (17*12+1), ring[ix][2]);
-                    SD(SQ(7, ix), (17*12+1), ring[ix][3]);
+                    SD(SQ(6, ix), ((N_K_INDICES+1)*12+0), ring[ix][0]);
+                    SD(SQ(7, ix), ((N_K_INDICES+1)*12+0), ring[ix][1]);
+                    SD(SQ(6, ix), ((N_K_INDICES+1)*12+1), ring[ix][2]);
+                    SD(SQ(7, ix), ((N_K_INDICES+1)*12+1), ring[ix][3]);
                 }
 
-                SD(SQ(6, 6), (17*12+0), bishop_dark);
-                SD(SQ(6, 7), (17*12+0), knight_dark);
-                SD(SQ(7, 6), (17*12+0), pawn_dark);
-                SD(SQ(7, 7), (17*12+0), pawn_ring_2_dark);
-                SD(SQ(6, 6), (17*12+1), bishop_a1h8);
-                SD(SQ(6, 7), (17*12+1), bishop_a8h1);
-                SD(SQ(7, 6), (17*12+1), bishop_a1h8n);
-                SD(SQ(7, 7), (17*12+1), bishop_a8h1n);
+                SD(SQ(6, 6), ((N_K_INDICES+1)*12+0), bishop_dark);
+                SD(SQ(6, 7), ((N_K_INDICES+1)*12+0), knight_dark);
+                SD(SQ(7, 6), ((N_K_INDICES+1)*12+0), pawn_dark);
+                SD(SQ(7, 7), ((N_K_INDICES+1)*12+0), pawn_ring_2_dark);
+                SD(SQ(6, 6), ((N_K_INDICES+1)*12+1), bishop_a1h8);
+                SD(SQ(6, 7), ((N_K_INDICES+1)*12+1), bishop_a8h1);
+                SD(SQ(7, 6), ((N_K_INDICES+1)*12+1), bishop_a1h8n);
+                SD(SQ(7, 7), ((N_K_INDICES+1)*12+1), bishop_a8h1n);
             }
         }
         data = sdata;
