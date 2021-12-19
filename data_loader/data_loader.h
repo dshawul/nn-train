@@ -108,6 +108,9 @@ public:
 #define is_light(x)      ((file(x)+rank(x)) & 1)
 #define is_light64(x)    ((file64(x)+rank64(x)) & 1)
 
+#define MAX(a, b)        (((a) > (b)) ? (a) : (b))
+#define MIN(a, b)        (((a) < (b)) ? (a) : (b))
+
 enum colors {
     white,black,neutral
 };

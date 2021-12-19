@@ -10,7 +10,7 @@ import numpy as np
 import multiprocessing as mp
 from multiprocessing import Process as Executor
 from joblib import Parallel, delayed
-from ctypes import cdll, c_int, c_char_p, POINTER, pointer
+from ctypes import cdll, c_int, c_char_p, c_float, POINTER, pointer
 
 #import tensorflow and set logging level
 import os
@@ -36,7 +36,7 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
-USE_LOADER = False
+USE_LOADER = True
 
 #NNUE
 NNUE_KIDX = 4
@@ -514,20 +514,19 @@ def fill_examples(examples, spid):
         ivalues = np.zeros(shape=(2,N*S), dtype=np.int8)
     else:
         iplanes = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-    oresult = np.zeros(shape=(N,),dtype=np.int8)
     if HEAD_TYPE == 0:
         ovalue = np.zeros(shape=(N,3),dtype=np.float32)
         opolicy = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        ret = [iplanes, oresult, ovalue, opolicy]
+        ret = [iplanes, ovalue, opolicy]
     elif HEAD_TYPE == 1:
         ovalue = np.zeros(shape=(N,3),dtype=np.float32)
         oscore = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        ret = [iplanes, oresult, ovalue, oscore]
+        ret = [iplanes, ovalue, oscore]
     elif HEAD_TYPE == 2:
         ovalue = np.zeros(shape=(N,3),dtype=np.float32)
         opolicy = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
         oscore = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
-        ret = [iplanes, oresult, ovalue, opolicy, oscore]
+        ret = [iplanes, ovalue, opolicy, oscore]
     else:
         ovalue = np.zeros(shape=(N,),dtype=np.float32)
 
@@ -563,9 +562,6 @@ def fill_examples(examples, spid):
             result = 2 - result
             value = 1 - value
 
-        #result
-        oresult[id] = result
-
         #value/policy/score heads
         if HEAD_TYPE == 3:
             #value
@@ -585,17 +581,20 @@ def fill_examples(examples, spid):
                 ovalue[id,:] = 0.0
                 ovalue[id,result] = 1.0
             else:
-                ovalue[id,1] = 0.7 * min(value, 1 - value)
-                ovalue[id,0] = value - ovalue[id,1] / 2.0
-                ovalue[id,2] = 1 - ovalue[id,0] - ovalue[id,1]
+                v1 = 0.7 * min(value, 1 - value)
+                v2 = value - v1 / 2
+                v3 = 1 - v1 - v2
+                ovalue[id,1] = v1
+                ovalue[id,0] = v2
+                ovalue[id,2] = v3
 
-                if FRAC_Z > 0:
-                    ovalue[id,:] *= (1 - FRAC_Z)
-                    ovalue[id,result] += FRAC_Z
+            if FRAC_Z > 0:
+                ovalue[id,:] *= (1 - FRAC_Z)
+                ovalue[id,result] += FRAC_Z
 
             #policy
             V = (1.0 - result / 2.0)
-            V=max(V,1e-5)
+            V = max(V,1e-5)
 
             if HEAD_TYPE == 0:
                 for i in range(offset, offset+nmoves*2, 2):
@@ -633,7 +632,7 @@ def fill_examples(examples, spid):
             fill_planes_fen(iplanes[id,:,:,:],fen,words,player)
 
     if HEAD_TYPE == 3:
-        ret = [iplanes[0,:cidx0,:], iplanes[1,:cidx1,:], ivalues[0,:cidx0], ivalues[1,:cidx1], oresult, ovalue]
+        ret = [iplanes[0,:cidx0,:], iplanes[1,:cidx1,:], ivalues[0,:cidx0], ivalues[1,:cidx1], ovalue]
 
     return ret
 
@@ -841,7 +840,6 @@ def prep_data(N,examples,args):
         x = (iplanes0, iplanes1, ivalues0, ivalues1)
     else:
         ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
-    ores = np.zeros(shape=(N,),dtype=np.int8)
     if HEAD_TYPE == 0:
         oval = np.zeros(shape=(N,3),dtype=np.float32)
         opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
@@ -874,49 +872,65 @@ def prep_data(N,examples,args):
             ivalues1[cidx1:(cidx1 + S2)] = res[i][3]
             cidx0 = cidx0 + S1
             cidx1 = cidx1 + S2
-            ores[slices[i]] = res[i][4]
         else:
             ipln[slices[i],:,:,:] = res[i][0]
-            ores[slices[i]] = res[i][1]
         if HEAD_TYPE == 0:
-            oval[slices[i],:] = res[i][2]
-            opol[slices[i],:] = res[i][3]
+            oval[slices[i],:] = res[i][1]
+            opol[slices[i],:] = res[i][2]
         elif HEAD_TYPE == 1:
-            oval[slices[i],:] = res[i][2]
-            osco[slices[i],:] = res[i][3]
+            oval[slices[i],:] = res[i][1]
+            osco[slices[i],:] = res[i][2]
         elif HEAD_TYPE == 2:
-            oval[slices[i],:] = res[i][2]
-            opol[slices[i],:] = res[i][3]
-            osco[slices[i],:] = res[i][4]
+            oval[slices[i],:] = res[i][1]
+            opol[slices[i],:] = res[i][2]
+            osco[slices[i],:] = res[i][3]
         else:
-            oval[slices[i]] = res[i][5]
+            oval[slices[i]] = res[i][4]
 
     return x,y
 
-def prep_data_nnue(data_loader,N,examples,args):
+def prep_data_with_loader(data_loader,N,examples,args):
 
-    S = 32 + (32 if NNUE_FACTORIZER else 0) + NNUE_FACTORIZER_EXTRA * 64
-    iplanes0 = np.zeros(shape=(N*S,2), dtype=np.int32)
-    ivalues0 = np.zeros(shape=(N*S), dtype=np.int8)
-    iplanes1 = np.zeros(shape=(N*S,2), dtype=np.int32)
-    ivalues1 = np.zeros(shape=(N*S), dtype=np.int8)
-    oval = np.zeros(shape=(N,),dtype=np.float32)
-    cidx0 = c_int()
-    cidx1 = c_int()
+    if HEAD_TYPE == 3:
+        S = 32 + (32 if NNUE_FACTORIZER else 0) + NNUE_FACTORIZER_EXTRA * 64
+        iplanes0 = np.zeros(shape=(N*S,2), dtype=np.int32)
+        ivalues0 = np.zeros(shape=(N*S), dtype=np.int8)
+        iplanes1 = np.zeros(shape=(N*S,2), dtype=np.int32)
+        ivalues1 = np.zeros(shape=(N*S), dtype=np.int8)
+        oval = np.zeros(shape=(N,),dtype=np.float32)
+        cidx0 = c_int()
+        cidx1 = c_int()
 
-    epd = ''.join(examples)
-    
-    data_loader.generate_input_nnue(
-        epd.encode(),
-        iplanes0,ivalues0,
-        iplanes1,ivalues1,oval,
-        pointer(cidx0),pointer(cidx1))
+        epd = ''.join(examples)
 
-    cidx0 = cidx0.value
-    cidx1 = cidx1.value
+        data_loader.generate_input_nnue(
+            epd.encode(),
+            iplanes0,ivalues0,
+            iplanes1,ivalues1,
+            oval,
+            pointer(cidx0),pointer(cidx1),
+            FRAC_Z)
 
-    x = (iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1])
-    y = (oval)
+        cidx0 = cidx0.value
+        cidx1 = cidx1.value
+
+        x = (iplanes0[:cidx0,:], iplanes1[:cidx1,:], ivalues0[:cidx0], ivalues1[:cidx1])
+        y = (oval)
+    else:
+        ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
+        oval = np.zeros(shape=(N,3),dtype=np.float32)
+        opol = np.zeros(shape=(N,BOARDY*BOARDX*POLICY_CHANNELS),dtype=np.float32)
+
+        epd = ''.join(examples)
+
+        data_loader.generate_input(
+            epd.encode(),
+            ipln, opol,
+            oval,
+            FRAC_Z, FRAC_PI)
+
+        x = (ipln)
+        y = (oval, opol)
 
     return x,y
 
@@ -924,16 +938,28 @@ def get_batch(myNet,args,start):
 
     if USE_LOADER:
         data_loader = cdll.LoadLibrary("data_loader/data_loader.so")
-        data_loader.generate_input_nnue.restype = None
-        data_loader.generate_input_nnue.argtypes = [
-            c_char_p,
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
-            np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
-            POINTER(c_int),
-            POINTER(c_int) ]
+
+        if HEAD_TYPE == 3:
+            data_loader.generate_input_nnue.restype = None
+            data_loader.generate_input_nnue.argtypes = [
+                c_char_p,
+                np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.int8, ndim=1, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS'),
+                POINTER(c_int),
+                POINTER(c_int),
+                c_float ]
+        else:
+            data_loader.generate_input.restype = None
+            data_loader.generate_input.argtypes = [
+                c_char_p,
+                np.ctypeslib.ndpointer(dtype=np.float32, ndim=4, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.float32, ndim=2, flags='C_CONTIGUOUS'),
+                np.ctypeslib.ndpointer(dtype=np.float32, ndim=2, flags='C_CONTIGUOUS'),
+                c_float,
+                c_float ]
 
     with (open(args.epd) if not args.gzip else gzip.open(args.epd,mode='rt')) as file:
         count = 0
@@ -969,7 +995,7 @@ def get_batch(myNet,args,start):
                 N = len(examples)
                 if N > 0:
                     if USE_LOADER:
-                        x,y = prep_data_nnue(data_loader, N,examples,args)
+                        x,y = prep_data_with_loader(data_loader, N,examples,args)
                     else:
                         x,y = prep_data(N,examples,args)
                     examples = []

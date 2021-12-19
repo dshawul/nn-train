@@ -22,6 +22,7 @@ OPT=0                    # Optimizer 0=SGD 1=ADAM
 LR=0.2                   # learning rate
 NREPLAY=$((32*G))        # Number of games in the replay buffer
 NSTEPS=1920              # Number of steps
+SAVE_STEPS=256           # Save network after this many steps
 CPUCT=125                # Cpuct constant
 CPUCT_ROOT_FAC=100       # Mulitply Cpuct at root by this factor
 POL_TEMP=110             # Policy temeprature
@@ -37,7 +38,6 @@ POL_GRAD=0               # Use policy gradient algo.
 POL_WEIGHT=2             # Policy weight
 SCO_WEIGHT=1             # Score head weight
 VAL_WEIGHT=1             # Value weight
-RSAVO=1                  # Save weights with optimization after this many chunks
 FRAC_PI=1                # Fraction of MCTS policy (PI) relative to one-hot policy(P)
 FRAC_Z=1                 # Fraction of ouctome(Z) relative to MCTS value(Q)
 FORCED_PLAYOUTS=0        # Forced playouts
@@ -58,7 +58,6 @@ CHANNELS=32              # Number of input channels
 POL_CHANNELS=16          # Number of policy channels
 NOAUXINP=                # No auxillary inputs
 TRNFLGS=                 # Additional training flags
-NBATCH=640               # Number of mini-batches to process at once
 BATCH_SIZE=512           # Mini-batch size
 DISTILL=0                # Distill from another net
 PIECE_MAP="KQRBNPkqrbnp" # Piece characters
@@ -224,7 +223,7 @@ init0() {
 
 #initialize random network
 init() {
-    python src/train.py --rand --dir ${NETS_DIR} --nets $1 --batch-size ${BATCH_SIZE} \
+    python src/train.py --rand --dir ${NETS_DIR} --net $1 --batch-size ${BATCH_SIZE} \
             ${NOAUXINP} --channels ${CHANNELS} --policy-channels ${POL_CHANNELS} \
             --boardx ${BOARDX} --boardy ${BOARDY} --head-type ${HEAD_TYPE}
     ./scripts/prepare.sh ${NETS_DIR} 0 $1 > /dev/null 2>&1
@@ -337,8 +336,8 @@ train() {
     SAVE=$LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64:${HOME}/cudnn-765/lib64
     python src/train.py ${TRNFLGS} \
-       --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --net ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
-       --opt ${OPT} --max-steps ${NSTEPS} --learning-rate ${LR} --piece-map ${PIECE_MAP} \
+       --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --net ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) \
+       --rsav ${SAVE_STEPS} --rsavo ${NSTEPS} --opt ${OPT} --max-steps ${NSTEPS} --learning-rate ${LR} --piece-map ${PIECE_MAP} \
        --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} --score-weight ${SCO_WEIGHT} \
        --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
        --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} --head-type ${HEAD_TYPE} \

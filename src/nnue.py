@@ -36,6 +36,7 @@ class DenseLayerForSparse(layers.Layer):
             shape=[self.num_units],
             regularizer = L2_REG,
             initializer = K_INIT)
+        super(DenseLayerForSparse, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
         outputs = tf.add(tf.sparse.sparse_dense_matmul(inputs, self.kernel), self.bias)

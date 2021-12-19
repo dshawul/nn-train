@@ -7,17 +7,32 @@
 #include "data_loader.h"
 #undef DLL_EXPORT
 
-#define USE_CHW      0
-#define USE_SPARSE   1
-#define N_K_INDICES 16
+//network types
+#define DEFAULT 0
+#define LCZERO  1
+#define SIMPLE  2
+#define QLEARN  3
+#define NNUE    4
+#define NONET  -1
 
-enum {DEFAULT, LCZERO, SIMPLE, QLEARN, NNUE, NONET = -1};
-static const int NNUE_FACTORIZER = 12;
-static const int NNUE_FACTORIZER_EXTRA = 2;
+#if 1
+#define NN_TYPE                NNUE
+#define USE_SPARSE             1
+#else
+#define NN_TYPE                DEFAULT
+#define USE_SPARSE             0
+#endif
+
+#define N_K_INDICES            16
+#define NNUE_FACTORIZER        12
+#define NNUE_FACTORIZER_EXTRA  2
+#define USE_CHW                0
+#define POLICY_CHANNELS        16
+
+// #define MYDEBUG
+
 static const int net_channels[] = {32, 112, 12, 32, N_K_INDICES*12+NNUE_FACTORIZER+NNUE_FACTORIZER_EXTRA, 0};
-static const int nn_type = NNUE;
-static const int CHANNELS = net_channels[nn_type];
-
+static const int CHANNELS = net_channels[NN_TYPE];
 
 /*
    Decode fen
@@ -29,10 +44,13 @@ static const char col_name[] = "WwBb";
 static const char cas_name[] = "KQkq";
 
 int decode_fen(const char* fen_str, int* player, int* castle,
-        int* fifty, int* move_number, float* oval, int* piece, int* square)
+        int* fifty, int* move_number,
+        float* oval, float* opol,
+        float frac_z, float frac_pi,
+        int* piece, int* square)
 {
     /*decode fen*/
-    int sq,index = 2;
+    int sq,index = 2,pos;
     const char* p = fen_str,*pfen;
     for(int r = 7;r >= 0; r--) {
         for(int f = 0;f <= 7;f++) {
@@ -95,10 +113,8 @@ int decode_fen(const char* fen_str, int* player, int* castle,
     /*fifty & hply*/
     p++;
     if(*p && *(p+1) && isdigit(*p) && ( isdigit(*(p+1)) || *(p+1) == ' ' ) ) {
-        sscanf(p,"%d %d",fifty,move_number);
-        int skip = 4 + (*fifty >= 10) + (*move_number >= 10) +
-                       (*fifty >= 100) + (*move_number >= 100);
-        p += skip;
+        sscanf(p,"%d %d%n",fifty,move_number,&pos);
+        p += pos;
         if(*move_number <= 0) *move_number = 1;
     } else {
         *fifty = 0;
@@ -106,10 +122,85 @@ int decode_fen(const char* fen_str, int* player, int* castle,
     }
 
     /*result*/
+    double value;
+    int result;
     char res[8];
-    sscanf(p,"%s %f",&res[0],oval);
-    if(*player > 0)
-        *oval = 1 - *oval;
+    sscanf(p,"%s %lf%n",&res[0],&value,&pos);
+    p += pos;
+    if(!strcmp(res,"1-0"))
+        result = 0;
+    else if(!strcmp(res,"0-1"))
+        result = 2;
+    else
+        result = 1;
+
+    if(*player > 0) {
+        result = 2 - result;
+        value = 1 - value;
+    }
+
+    /*value*/
+#if NN_TYPE == NNUE
+    if (frac_z == 0)
+        oval[0] = value;
+    else if(frac_z == 1)
+        oval[0] = 1 - result / 2.0;
+    else
+        oval[0] = value * (1 - frac_z) + (1 - result / 2.0) * frac_z;
+#else
+    if (frac_z == 1) {
+        oval[0] = oval[1] = oval[2] = 0;
+        oval[result] = 1;
+    } else {
+        double v1, v2, v3;
+        v1 = 0.7 * MIN(value, 1 - value);
+        v2 = value - v1 / 2;
+        v3 = 1 - v1 - v2;
+        oval[1] = v1;
+        oval[0] = v2;
+        oval[2] = v3;
+
+        if(frac_z > 0) {
+            for(int i = 0; i < 3; i++)
+                oval[i] *= (1 - frac_z);
+            oval[result] += frac_z;
+        }
+    }
+#ifdef MYDEBUG
+    printf("%.8f %.8f %.8f\n",oval[0],oval[1],oval[2]);
+#endif
+    /*policy*/
+    int nmoves;
+    sscanf(p,"%d%n",&nmoves,&pos);
+    p += pos;
+    int ids[256];
+
+    for(int i = 0; i < nmoves; i++) {
+        int idx;
+        double pol;
+        sscanf(p,"%d %lf%n",&idx,&pol,&pos);
+        p += pos;
+        opol[idx] = pol;
+#ifdef MYDEBUG
+        printf("%d. %d %f\n",i+1,idx,opol[idx]);
+#endif
+        ids[i] = idx;
+    }
+
+    if(frac_pi < 1) {
+        int bestm;
+        int r = sscanf(p, "%d%n", &bestm,&pos);
+#ifdef MYDEBUG
+        printf("bestm %d\n",bestm);
+#endif
+        p += pos;
+        if(r != EOF) {
+            for(int i = 0; i < nmoves; i++)
+                opol[ids[i]] *= (1 - frac_pi);
+            opol[bestm] += (1 - frac_pi);
+        }
+    }
+#endif
 
     return index + 1;
 }
@@ -120,7 +211,7 @@ int decode_fen(const char* fen_str, int* player, int* castle,
 #define invert_color(x)  (((x) > 6) ? ((x) - 6) : ((x) + 6))
 
 void fill_input_planes(
-        int player, int cast, int fifty, int hply, int epsquare, bool flip_h, int hist,
+        int player, int cast, int fifty, int move_number, int epsquare, bool flip_h, int hist,
         int* const draw, int* const piece, int* const square, float* data, int nn_type_,
         int* const __restrict indices0, int8_t* const __restrict values0,
         int* const __restrict indices1, int8_t* const __restrict values1,
@@ -302,20 +393,40 @@ void fill_input_planes(
             D(sq, (CHANNELS - 8)) = 1.0;
         }
 
-        if(player == _BLACK) {
-            if(cast & BLC_FLAG) SET((CHANNELS - (flip_h ? 6 : 7) ), 1.0);
-            if(cast & BSC_FLAG) SET((CHANNELS - (flip_h ? 7 : 6) ), 1.0);
-            if(cast & WLC_FLAG) SET((CHANNELS - (flip_h ? 4 : 5) ), 1.0);
-            if(cast & WSC_FLAG) SET((CHANNELS - (flip_h ? 5 : 4) ), 1.0);
+        if(USE_CHW) {
+            if(player == _BLACK) {
+                if(cast & BLC_FLAG) SET((CHANNELS - (flip_h ? 6 : 7) ), 1.0);
+                if(cast & BSC_FLAG) SET((CHANNELS - (flip_h ? 7 : 6) ), 1.0);
+                if(cast & WLC_FLAG) SET((CHANNELS - (flip_h ? 4 : 5) ), 1.0);
+                if(cast & WSC_FLAG) SET((CHANNELS - (flip_h ? 5 : 4) ), 1.0);
+            } else {
+                if(cast & WLC_FLAG) SET((CHANNELS - (flip_h ? 6 : 7) ), 1.0);
+                if(cast & WSC_FLAG) SET((CHANNELS - (flip_h ? 7 : 6) ), 1.0);
+                if(cast & BLC_FLAG) SET((CHANNELS - (flip_h ? 4 : 5) ), 1.0);
+                if(cast & BSC_FLAG) SET((CHANNELS - (flip_h ? 5 : 4) ), 1.0);
+            }
+            SET((CHANNELS - 3), move_number / 200.0);
+            SET((CHANNELS - 2), fifty / 100.0);
+            SET((CHANNELS - 1), 1.0);
         } else {
-            if(cast & WLC_FLAG) SET((CHANNELS - (flip_h ? 6 : 7) ), 1.0);
-            if(cast & WSC_FLAG) SET((CHANNELS - (flip_h ? 7 : 6) ), 1.0);
-            if(cast & BLC_FLAG) SET((CHANNELS - (flip_h ? 4 : 5) ), 1.0);
-            if(cast & BSC_FLAG) SET((CHANNELS - (flip_h ? 5 : 4) ), 1.0);
+            for(int i = 0; i < 64; i++) {
+                sq = SQ6488(i);
+                if(player == _BLACK) {
+                    if(cast & BLC_FLAG) D(sq,(CHANNELS - (flip_h ? 6 : 7) )) = 1.0;
+                    if(cast & BSC_FLAG) D(sq,(CHANNELS - (flip_h ? 7 : 6) )) = 1.0;
+                    if(cast & WLC_FLAG) D(sq,(CHANNELS - (flip_h ? 4 : 5) )) = 1.0;
+                    if(cast & WSC_FLAG) D(sq,(CHANNELS - (flip_h ? 5 : 4) )) = 1.0;
+                } else {
+                    if(cast & WLC_FLAG) D(sq,(CHANNELS - (flip_h ? 6 : 7) )) = 1.0;
+                    if(cast & WSC_FLAG) D(sq,(CHANNELS - (flip_h ? 7 : 6) )) = 1.0;
+                    if(cast & BLC_FLAG) D(sq,(CHANNELS - (flip_h ? 4 : 5) )) = 1.0;
+                    if(cast & BSC_FLAG) D(sq,(CHANNELS - (flip_h ? 5 : 4) )) = 1.0;
+                }
+                D(sq,(CHANNELS - 3)) = move_number / 200.0;
+                D(sq,(CHANNELS - 2)) = fifty / 100.0;
+                D(sq,(CHANNELS - 1)) = 1.0;
+            }
         }
-        SET((CHANNELS - 3), (hply / 2 + 1) / 200.0);
-        SET((CHANNELS - 2), fifty / 100.0);
-        SET((CHANNELS - 1), 1.0);
 
     } else if (nn_type_ == SIMPLE) {
 
@@ -368,7 +479,7 @@ void fill_input_planes(
             3,  3,  3,  3,
             3,  3,  3,  3
 #elif N_K_INDICES==2
-                0,  0,  0,  0,
+            0,  0,  0,  0,
             1,  1,  1,  1,
             1,  1,  1,  1,
             1,  1,  1,  1,
@@ -635,7 +746,7 @@ void fill_input_planes(
         SET((CHANNELS - 1), 1.0);
     }
 
-#if 0
+#ifdef MYDEBUG
     for(int c = 0; c < CHANNELS;c++) {
         printf("//Channel %d\n",c);
         for(int i = 0; i < 8; i++) {
@@ -650,43 +761,6 @@ void fill_input_planes(
     fflush(stdout);
 #endif
 }
-
-/*
- * init planes
- */
-static float* inp_planes = 0;
-
-void init_input_planes() {
-    unsigned int N_PLANE = (nn_type == NNUE) ? 
-        (8 * 8 * net_channels[NNUE] * 2) :
-        (8 * 8 * net_channels[LCZERO]);
-
-    inp_planes = (float*) malloc(N_PLANE * sizeof(float));
-}
-
-/*
- * fill planes
- */
-void fill_data(const char* fen, float* iplanes, int nn_type_,
-        int* const __restrict indices0, int8_t* const __restrict values0,
-        int* const __restrict indices1, int8_t* const __restrict values1,
-        float* const __restrict oval,
-        int* const cidx0, int* const cidx1,
-        int pid
-        ) {
-    int pieces[33],squares[33],isdraw[1],player,castle,fifty,move_number, count;
-    count = decode_fen((char*)fen,&player,&castle,&fifty,&move_number,oval,pieces,squares);
-
-    bool flip_h = (file64(squares[0]) <= FILED);
-    int hist = 1;
-    int hply = move_number;
-    int epsquare = squares[count - 1];
-
-    ::fill_input_planes(player,castle,fifty,hply,epsquare,flip_h,hist,
-            isdraw,pieces,squares,iplanes, nn_type_,
-            indices0, values0, indices1, values1, cidx0, cidx1, pid);
-}
-
 /*
    Process PGN/EPD in parallel
  */
@@ -714,13 +788,78 @@ bool EPD::next(char* moves, bool silent) {
 }
 
 /*
+ * fill planes
+ */
+void fill_data(const char* fen,
+        float* const __restrict iplanes, float* const __restrict opol,
+        float* const __restrict oval,
+        float frac_z, float frac_pi,
+        int pid
+        ) {
+    int pieces[33],squares[33],isdraw[1],player,castle,fifty,move_number, count;
+    count = decode_fen((char*)fen,&player,&castle,&fifty,&move_number,oval,opol,frac_z,frac_pi,pieces,squares);
+
+    bool flip_h = (file64(squares[player]) <= FILED);
+    int hist = 1;
+    int epsquare = squares[count - 1];
+
+    ::fill_input_planes(player,castle,fifty,move_number,epsquare,flip_h,hist,
+            isdraw,pieces,squares,iplanes, NN_TYPE,
+            0, 0, 0, 0, 0, 0, pid);
+}
+void fill_data_nnue(const char* fen,
+        int* const __restrict indices0, int8_t* const __restrict values0,
+        int* const __restrict indices1, int8_t* const __restrict values1,
+        float* const __restrict oval,
+        float frac_z,
+        int* const cidx0, int* const cidx1,
+        int pid
+        ) {
+    int pieces[33],squares[33],isdraw[1],player,castle,fifty,move_number, count;
+    count = decode_fen((char*)fen,&player,&castle,&fifty,&move_number,oval,0,frac_z,0,pieces,squares);
+
+    bool flip_h = (file64(squares[player]) <= FILED);
+    int hist = 1;
+    int epsquare = squares[count - 1];
+
+    ::fill_input_planes(player,castle,fifty,move_number,epsquare,flip_h,hist,
+            isdraw,pieces,squares, 0, NNUE,
+            indices0, values0, indices1, values1, cidx0, cidx1, pid);
+}
+
+/*
+ * process epd string
+ */
+DLLExport void _CDECL generate_input(const char* sdata,
+        float* const __restrict iplanes, float* const __restrict opol,
+        float* const __restrict oval,
+        float frac_z, float frac_pi
+        ) {
+
+    EPD epdf;
+    char epds[4 * MAX_FILE_STR];
+
+    epdf.open(sdata);
+
+    while(epdf.next(epds,true)) {
+        int idx = epdf.count - 1;
+        fill_data(epds,
+                &iplanes[idx * 64 * CHANNELS], &opol[idx * 64 * POLICY_CHANNELS],
+                &oval[idx * 3],
+                frac_z, frac_pi,
+                idx);
+    }
+}
+
+/*
  * process epd string
  */
 DLLExport void _CDECL generate_input_nnue(const char* sdata,
         int* const __restrict indices0, int8_t* const __restrict values0,
         int* const __restrict indices1, int8_t* const __restrict values1,
         float* const __restrict oval,
-        int* const cidx0, int* const cidx1
+        int* const cidx0, int* const cidx1,
+        float frac_z
         ) {
 
     EPD epdf;
@@ -731,10 +870,11 @@ DLLExport void _CDECL generate_input_nnue(const char* sdata,
 
     while(epdf.next(epds,true)) {
         int idx = epdf.count - 1;
-        fill_data(epds, inp_planes, NNUE,
+        fill_data_nnue(epds,
                 indices0, values0,
                 indices1, values1,
                 &oval[idx],
+                frac_z,
                 cidx0, cidx1,
                 idx);
     }
@@ -745,10 +885,11 @@ DLLExport void _CDECL generate_input_nnue(const char* sdata,
  */
 #ifdef TEST
 int main() {
+#ifdef MYDEBUG
+    static const int N = 1;
+#else
     static const int N = 131072;
-
-    if(!USE_SPARSE)
-        init_input_planes();
+#endif
 
     //---read chunk-----
     std::ifstream ifs("temp0.epd");
@@ -761,7 +902,11 @@ int main() {
         if(cnt >= N) break;
     }
 
+    float frac_z = 0;
+    float frac_pi = 1;
+
     //---generate input planes
+#if NN_TYPE == NNUE
     int* indices0 = new int[N * 192 * 2];
     int* indices1 = new int[N * 192 * 2];
     int8_t* values0 = new int8_t[N * 192];
@@ -773,7 +918,18 @@ int main() {
             indices0, values0,
             indices1, values1,
             oval,
-            &cidx0, &cidx1);
+            &cidx0, &cidx1,
+            frac_z);
+#else
+    float* iplanes = new float[N * 64 * CHANNELS];
+    float* opol = new float[N * 64 * POLICY_CHANNELS];
+    float* oval = new float[N * 3];
+
+    generate_input(all_lines.c_str(),
+        iplanes, opol,
+        oval,
+        frac_z, frac_pi);
+#endif
 
     return 0;
 }
