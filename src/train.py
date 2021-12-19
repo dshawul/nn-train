@@ -36,7 +36,7 @@ FILE_U = BOARDX - 1
 FRAC_PI = 1
 FRAC_Z  = 1
 HEAD_TYPE = 0
-USE_LOADER = True
+USE_LOADER = False
 
 #NNUE
 NNUE_KIDX = 4
@@ -840,7 +840,7 @@ def prep_data(N,examples,args):
         ivalues1 = np.zeros(shape=(S2), dtype=np.int8)
         x = (iplanes0, iplanes1, ivalues0, ivalues1)
     else:
-        ipln = np.zeros(shape=(N,CHANNELS,BOARDY,BOARDX),dtype=np.float32)
+        ipln = np.zeros(shape=(N,BOARDY,BOARDX,CHANNELS),dtype=np.float32)
     ores = np.zeros(shape=(N,),dtype=np.int8)
     if HEAD_TYPE == 0:
         oval = np.zeros(shape=(N,3),dtype=np.float32)

@@ -20,7 +20,6 @@ SD=4                     # depth limit for AB search
 G=24576                  # train net after this number of games
 OPT=0                    # Optimizer 0=SGD 1=ADAM
 LR=0.2                   # learning rate
-EPOCHS=1                 # Number of epochs
 NREPLAY=$((32*G))        # Number of games in the replay buffer
 NSTEPS=1920              # Number of steps
 CPUCT=125                # Cpuct constant
@@ -338,10 +337,10 @@ train() {
     SAVE=$LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64:${HOME}/cudnn-765/lib64
     python src/train.py ${TRNFLGS} \
-       --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --nets ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
-       --opt ${OPT} --learning-rate ${LR} --epochs ${EPOCHS} --piece-map ${PIECE_MAP} \
+       --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --net ${net[@]} --gpus ${GPUS} --cores $((CPUS/2)) --rsavo ${RSAVO} \
+       --opt ${OPT} --max-steps ${NSTEPS} --learning-rate ${LR} --piece-map ${PIECE_MAP} \
        --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} --score-weight ${SCO_WEIGHT} \
-       --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --nbatch ${NBATCH} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
+       --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} --global-steps ${GLOBAL_STEPS} \
        --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} --frac-pi ${FRAC_PI} --frac-z ${FRAC_Z} --head-type ${HEAD_TYPE} \
        ${NOAUXINP}
     export LD_LIBRARY_PATH=${SAVE}
