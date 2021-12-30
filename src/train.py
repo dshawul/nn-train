@@ -807,13 +807,16 @@ class NNet():
 
     def save_infer_graph(self, args):
         filepath = os.path.join(args.dir, "infer-")
+        fname = filepath + str(args.net)
+        if os.path.exists(fname):
+            return
+
         if not os.path.exists(args.dir):
             os.mkdir(args.dir)
 
         tf.keras.backend.set_learning_phase(0)
 
         #create inference model
-        fname = filepath + str(args.net)
         new_model = self.new_model(args)
         new_model.save(fname, include_optimizer=False, save_format='h5')
 

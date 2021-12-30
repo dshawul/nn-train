@@ -24,29 +24,22 @@ def freeze_model(model):
     from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 
     # Convert Keras model to ConcreteFunction
-    full_model = tf.function(lambda x: model(x))
+    model._name=''
+    model_func = tf.function(lambda x: model(x))
     input_types = []
     for inp in model.inputs:
         input_types.append(inp.type_spec)
-    full_model = full_model.get_concrete_function(input_types)
+    conc_func = model_func.get_concrete_function(input_types)
+    frozen_func = convert_variables_to_constants_v2(conc_func)
 
-    # Get frozen ConcreteFunction
-    frozen_func = convert_variables_to_constants_v2(full_model)
-    frozen_func.graph.as_graph_def()
-
-    layers = [op.name for op in frozen_func.graph.get_operations()]
+    # print layers
+    gp = frozen_func.graph.as_graph_def()
     print("-" * 50)
-    print("Frozen model layers: ")
-    for layer in layers:
-        print(layer)
-
+    for i,n in enumerate(gp.node):
+        print(str(i) + ". " + n.name)
     print("-" * 50)
-    print("Frozen model inputs: ")
-    print(frozen_func.inputs)
-    print("Frozen model outputs: ")
-    print(frozen_func.outputs)
 
-    return frozen_func.graph
+    return gp
 
 def copy_weights(m1,m2):
     """
@@ -216,13 +209,6 @@ def convertGraph(modelPath, inferPath, outdir, name):
         opt_model = my_load_model(modelPath)
         net_model = my_load_model(inferPath)
         copy_weights(opt_model, net_model)
-
-        #save and reload inference model with cleared session
-        modelPath = os.path.join(outdir, "_temp_")
-        net_model.save(modelPath, include_optimizer=False, save_format='h5')
-        tf.keras.backend.clear_session()
-        tf.keras.backend.set_learning_phase(0)
-        net_model = my_load_model(modelPath)
     else:
         net_model = my_load_model(modelPath)
 
