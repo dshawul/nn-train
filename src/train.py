@@ -109,6 +109,10 @@ NNUE_KINDEX_TAB = [
    ]
 ]
 
+#############################
+#        DATA LOADERS
+#############################
+
 #NN
 def fill_piece(iplanes, ix, bb, b, flip_rank, flip_file):
     """ Compute piece placement and attack plane for a given piece type """
@@ -635,194 +639,6 @@ def fill_examples(examples, spid):
         ret = [iplanes[0,:cidx0,:], iplanes[1,:cidx1,:], ivalues[0,:cidx0], ivalues[1,:cidx1], ovalue]
 
     return ret
-
-def build_model(cid):
-    INPUT_SHAPE=(None, None, CHANNELS)
-    if cid == 0:
-        return resnet.build_net(INPUT_SHAPE,  2,  32, POLICY_CHANNELS, HEAD_TYPE)
-    elif cid == 1:
-        return resnet.build_net(INPUT_SHAPE,  6,  64, POLICY_CHANNELS, HEAD_TYPE)
-    elif cid == 2:
-        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS, HEAD_TYPE)
-    elif cid == 3:
-        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
-    elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 24, 320, POLICY_CHANNELS, HEAD_TYPE)
-    elif cid == 5:
-        INPUT_SHAPE=(NNUE_FEATURES,)
-        return nnue.build_net(INPUT_SHAPE)
-    else:
-        print("Unsupported network id (Use 0 to 4).")
-        sys.exit()
-
-# losses and accuracy
-def loss(y_true, y_pred):
-    is_legal = tf.greater(y_true, 0)
-    y_pred = tf.where(is_legal, y_pred, y_true)
-    return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
-
-def paccuracy(y_true,y_pred):
-    is_legal = tf.greater(y_true, 0)
-    y_pred = tf.where(is_legal, y_pred, y_true)
-    return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
-
-def sloss(y_true, y_pred):
-    is_legal = tf.greater(y_true, 0)
-    y_pred = tf.where(is_legal, y_pred, y_true)
-
-    su = tf.reduce_sum(tf.cast(is_legal, tf.float32))
-    sz = tf.cast(tf.size(is_legal), tf.float32)
-    return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
-
-def my_load_model(fname,compile=True):
-    return tf.keras.models.load_model(fname, compile=compile,
-            custom_objects={'loss': loss,
-                            'paccuracy':paccuracy,
-                            'sloss':sloss,
-                            'clipped_relu':nnue.clipped_relu,
-                            'DenseLayerForSparse':nnue.DenseLayerForSparse})
-
-class NNet():
-    def __init__(self,args):
-        self.mirrored_strategy = tf.distribute.MirroredStrategy()
-
-    def new_model(self,args):
-        if args.gpus > 1:
-            with self.mirrored_strategy.scope():
-                return build_model(args.net)
-        else:
-            return build_model(args.net)
-
-    def load_model(self,fname,compile,args):
-        if args.gpus > 1:
-            with self.mirrored_strategy.scope():
-                return my_load_model(fname,compile)
-        else:
-            return my_load_model(fname,compile)
-
-    def compile_model(self,mdx,args):
-        if args.opt == 0:
-            opt = tf.keras.optimizers.SGD(learning_rate=args.lr, momentum=0.9, nesterov=True)
-        else:
-            opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
-
-        if args.mixed:
-            opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
-
-        #losses and metrics
-        if HEAD_TYPE == 0:
-            losses = {"value":'categorical_crossentropy', "policya":loss}
-            metrics = {"value":'accuracy', "policya":paccuracy}
-            loss_weights = [args.val_w, args.pol_w]
-
-        elif HEAD_TYPE == 1:
-            losses  = {"value":'categorical_crossentropy', "scorea":sloss}
-            metrics = {"value":'accuracy'}
-            loss_weights = [args.val_w, args.score_w]
-
-        elif HEAD_TYPE == 2:
-            losses  = {"value":'categorical_crossentropy', "policya":loss, "scorea":sloss}
-            metrics = {"value":'accuracy', "policya":paccuracy}
-            loss_weights = [args.val_w, args.pol_w, args.score_w]
-        else:
-            losses  = {"value":'mean_squared_error'}
-            metrics = {}
-            loss_weights = [args.val_w]
-
-        # compile model
-        if args.gpus > 1:
-            with self.mirrored_strategy.scope():
-                mdx.compile(loss=losses,loss_weights=loss_weights,
-                      optimizer=opt,metrics=metrics)
-        else:
-            mdx.compile(loss=losses,loss_weights=loss_weights,
-                  optimizer=opt,metrics=metrics)
-
-    def train(self,x,y,steps,t_steps,args):
-
-        #construct sparse matrix
-        if HEAD_TYPE == 3:
-            N = y.shape[0]
-            dense_shape = (N,NNUE_FEATURES)
-            x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
-            x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
-            x = [x1, x2]
-
-        self.callbacks.on_train_batch_begin(steps)
-
-        logs = self.model.train_on_batch(x,y,reset_metrics = False,return_dict = True)
-
-        self.callbacks.on_train_batch_end(steps, logs)
-
-        self.tensorboard.on_epoch_end(t_steps, logs)
-
-    def save_checkpoint(self, nid, args, iopt=False):
-        filepath = os.path.join(args.dir, "ID-" + str(nid))
-        if not os.path.exists(args.dir):
-            os.mkdir(args.dir)
-
-        #save each model
-        fname = filepath  + "-model-" + str(args.net)
-        self.model.save(fname, include_optimizer=iopt, save_format='h5')
-
-    def load_checkpoint(self, nid, args):
-        filepath = os.path.join(args.dir, "ID-" + str(nid))
-
-        #create training model]
-        fname = filepath  + "-model-" + str(args.net)
-        exists = os.path.exists(fname)
-        if not os.path.exists(fname):
-            mdx = self.new_model(args)
-            self.compile_model(mdx, args)
-        else:
-            comp = ((nid * args.rsav) % args.rsavo == 0)
-            mdx = self.load_model(fname,comp,args)
-            if not mdx.optimizer:
-                print("====== ", fname, " : starting from fresh optimizer state ======")
-                self.compile_model(mdx, args)
-            else:
-                print("Setting learning rate: " + str(args.lr))
-                mdx.optimizer.lr.assign(args.lr)
-        self.model = mdx
-
-        #common callbacks list
-        self.callbacks = tf.keras.callbacks.CallbackList(
-            None,
-            add_history = True,
-            add_progbar = True,
-            model = self.model,
-            epochs = 1,
-            verbose = 1,
-            steps = args.max_steps
-        )
-
-        #tensorboard callback
-        log_dir = "logs/fit/model-" + str(args.net)
-        self.tensorboard = tf.keras.callbacks.TensorBoard(
-            log_dir=log_dir,
-            update_freq=args.rsav
-        )
-        self.tensorboard.set_model(self.model)
-        return exists
-
-    def save_infer_graph(self, args):
-        filepath = os.path.join(args.dir, "infer-")
-        fname = filepath + str(args.net)
-        if os.path.exists(fname):
-            return
-
-        if not os.path.exists(args.dir):
-            os.mkdir(args.dir)
-
-        tf.keras.backend.set_learning_phase(0)
-
-        #create inference model
-        new_model = self.new_model(args)
-        new_model.save(fname, include_optimizer=False, save_format='h5')
-
-        tf.keras.backend.clear_session()
-        tf.keras.backend.set_learning_phase(1)
-
 def prep_data(N,examples,args):
 
     #multiprocess epd
@@ -1008,6 +824,198 @@ def get_batch(myNet,args,start):
             if not line:
                 break
 
+#############################
+#             MODEL
+#############################
+
+def build_model(cid):
+    INPUT_SHAPE=(None, None, CHANNELS)
+    if cid == 0:
+        return resnet.build_net(INPUT_SHAPE,  2,  32, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 1:
+        return resnet.build_net(INPUT_SHAPE,  6,  64, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 2:
+        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 3:
+        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 4:
+        return resnet.build_net(INPUT_SHAPE, 24, 320, POLICY_CHANNELS, HEAD_TYPE)
+    elif cid == 5:
+        INPUT_SHAPE=(NNUE_FEATURES,)
+        return nnue.build_net(INPUT_SHAPE)
+    else:
+        print("Unsupported network id (Use 0 to 4).")
+        sys.exit()
+
+# losses and accuracy
+def loss(y_true, y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+    return tf.keras.losses.categorical_crossentropy(y_true, y_pred)
+
+def paccuracy(y_true,y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+    return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
+
+def sloss(y_true, y_pred):
+    is_legal = tf.greater(y_true, 0)
+    y_pred = tf.where(is_legal, y_pred, y_true)
+
+    su = tf.reduce_sum(tf.cast(is_legal, tf.float32))
+    sz = tf.cast(tf.size(is_legal), tf.float32)
+    return  (sz / su) * tf.keras.losses.mean_squared_error(y_true, y_pred)
+
+def my_load_model(fname,compile=True):
+    return tf.keras.models.load_model(fname, compile=compile,
+            custom_objects={'loss': loss,
+                            'paccuracy':paccuracy,
+                            'sloss':sloss,
+                            'clipped_relu':nnue.clipped_relu,
+                            'DenseLayerForSparse':nnue.DenseLayerForSparse})
+
+class NNet():
+    def __init__(self,args):
+        self.mirrored_strategy = tf.distribute.MirroredStrategy()
+
+    def new_model(self,args):
+        if args.gpus > 1:
+            with self.mirrored_strategy.scope():
+                return build_model(args.net)
+        else:
+            return build_model(args.net)
+
+    def load_model(self,fname,compile,args):
+        if args.gpus > 1:
+            with self.mirrored_strategy.scope():
+                return my_load_model(fname,compile)
+        else:
+            return my_load_model(fname,compile)
+
+    def compile_model(self,mdx,args):
+        if args.opt == 0:
+            opt = tf.keras.optimizers.SGD(learning_rate=args.lr, momentum=0.9, nesterov=True)
+        else:
+            opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+
+        if args.mixed:
+            opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+
+        #losses and metrics
+        if HEAD_TYPE == 0:
+            losses = {"value":'categorical_crossentropy', "policya":loss}
+            metrics = {"value":'accuracy', "policya":paccuracy}
+            loss_weights = [args.val_w, args.pol_w]
+
+        elif HEAD_TYPE == 1:
+            losses  = {"value":'categorical_crossentropy', "scorea":sloss}
+            metrics = {"value":'accuracy'}
+            loss_weights = [args.val_w, args.score_w]
+
+        elif HEAD_TYPE == 2:
+            losses  = {"value":'categorical_crossentropy', "policya":loss, "scorea":sloss}
+            metrics = {"value":'accuracy', "policya":paccuracy}
+            loss_weights = [args.val_w, args.pol_w, args.score_w]
+        else:
+            losses  = {"value":'mean_squared_error'}
+            metrics = {}
+            loss_weights = [args.val_w]
+
+        # compile model
+        if args.gpus > 1:
+            with self.mirrored_strategy.scope():
+                mdx.compile(loss=losses,loss_weights=loss_weights,
+                      optimizer=opt,metrics=metrics)
+        else:
+            mdx.compile(loss=losses,loss_weights=loss_weights,
+                  optimizer=opt,metrics=metrics)
+
+    def train(self,x,y,steps,t_steps,args):
+
+        #construct sparse matrix
+        if HEAD_TYPE == 3:
+            N = y.shape[0]
+            dense_shape = (N,NNUE_FEATURES)
+            x1 = tf.sparse.reorder(tf.SparseTensor(x[0],x[2].astype(np.float32),dense_shape))
+            x2 = tf.sparse.reorder(tf.SparseTensor(x[1],x[3].astype(np.float32),dense_shape))
+            x = [x1, x2]
+
+        self.callbacks.on_train_batch_begin(steps)
+
+        logs = self.model.train_on_batch(x,y,reset_metrics = False,return_dict = True)
+
+        self.callbacks.on_train_batch_end(steps, logs)
+
+        self.tensorboard.on_epoch_end(t_steps, logs)
+
+    def save_checkpoint(self, nid, args, iopt=False):
+        filepath = os.path.join(args.dir, "ID-" + str(nid))
+        if not os.path.exists(args.dir):
+            os.mkdir(args.dir)
+
+        #save each model
+        fname = filepath  + "-model-" + str(args.net)
+        self.model.save(fname, include_optimizer=iopt, save_format='h5')
+
+    def load_checkpoint(self, nid, args):
+        filepath = os.path.join(args.dir, "ID-" + str(nid))
+
+        #create training model]
+        fname = filepath  + "-model-" + str(args.net)
+        exists = os.path.exists(fname)
+        if not os.path.exists(fname):
+            mdx = self.new_model(args)
+            self.compile_model(mdx, args)
+        else:
+            comp = ((nid * args.rsav) % args.rsavo == 0)
+            mdx = self.load_model(fname,comp,args)
+            if not mdx.optimizer:
+                print("====== ", fname, " : starting from fresh optimizer state ======")
+                self.compile_model(mdx, args)
+            else:
+                print("Setting learning rate: " + str(args.lr))
+                mdx.optimizer.lr.assign(args.lr)
+
+        self.model = mdx
+
+        #common callbacks list
+        self.callbacks = tf.keras.callbacks.CallbackList(
+            None,
+            add_history = True,
+            add_progbar = True,
+            model = self.model,
+            epochs = 1,
+            verbose = 1,
+            steps = args.max_steps
+        )
+
+        #tensorboard callback
+        log_dir = "logs/fit/model-" + str(args.net)
+        self.tensorboard = tf.keras.callbacks.TensorBoard(
+            log_dir=log_dir,
+            update_freq=args.rsav
+        )
+        self.tensorboard.set_model(self.model)
+        return exists
+
+    def save_infer_graph(self, args):
+        filepath = os.path.join(args.dir, "infer-")
+        fname = filepath + str(args.net)
+        if os.path.exists(fname):
+            return
+
+        if not os.path.exists(args.dir):
+            os.mkdir(args.dir)
+
+        tf.keras.backend.set_learning_phase(0)
+
+        #create inference model
+        new_model = self.new_model(args)
+        new_model.save(fname, include_optimizer=False, save_format='h5')
+
+        tf.keras.backend.clear_session()
+        tf.keras.backend.set_learning_phase(1)
+
 class MyExecutor(Executor):
 
     def __init__(self,queue,gen):
@@ -1130,13 +1138,6 @@ def main(argv):
 
     #save inference graphs
     myNet.save_infer_graph(args)
-
-    #initialize mixed precision training
-    if args.mixed:
-        config = tf.compat.v1.ConfigProto()
-        config.graph_options.rewrite_options.auto_mixed_precision = True
-        sess = tf.compat.v1.Session(config=config)
-        tf.compat.v1.keras.backend.set_session(sess)
 
     #load networks
     print("Loading network: " + str(args.net))
