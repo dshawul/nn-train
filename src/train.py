@@ -1118,6 +1118,9 @@ def main(argv):
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
 
+    #set JIT compilation of graphs
+    tf.config.optimizer.set_jit(True)
+
     # init net
     myNet = NNet(args)
 
