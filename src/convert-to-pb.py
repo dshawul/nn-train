@@ -16,7 +16,7 @@ except:
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 
-SAVE_BIN = False
+SAVE_BIN = True
 VERSION = 0
 PLOT = True
 

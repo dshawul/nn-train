@@ -1067,7 +1067,7 @@ def train_epd(myNet,args,myEpd,nid,start=1):
 
     p1.terminate()
 
-def main(argv):
+def main():
     global AUX_INP, CHANNELS, BOARDX, BOARDY, FRAC_Z, FRAC_PI
     global POLICY_CHANNELS,  BATCH_SIZE, PIECE_MAP, RANK_U, FILE_U, HEAD_TYPE
 
@@ -1155,4 +1155,4 @@ def main(argv):
         train_epd(myNet, args, args.epd, nid, start)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
