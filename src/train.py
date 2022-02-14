@@ -16,6 +16,7 @@ from ctypes import cdll, c_int, c_char_p, c_float, POINTER, pointer
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+import tensorflow_addons as tfa
 try:
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 except:
@@ -895,8 +896,13 @@ class NNet():
     def compile_model(self,mdx,args):
         if args.opt == 0:
             opt = tf.keras.optimizers.SGD(learning_rate=args.lr, momentum=0.9, nesterov=True)
-        else:
+        elif args.opt == 1:
             opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+        elif args.opt == 2:
+            opt = tfa.optimizers.RectifiedAdam(learning_rate=args.lr)
+        else:
+            radam = tfa.optimizers.RectifiedAdam(learning_rate=args.lr)
+            opt = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
 
         if args.mixed:
             opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(opt)
@@ -960,6 +966,10 @@ class NNet():
     def load_checkpoint(self, nid, args):
         filepath = os.path.join(args.dir, "ID-" + str(nid))
 
+        #print optimizer name
+        opt_name = { 0: "SGD", 1: "Adam", 2: "Rectified Adam", 3: "Ranger"}
+        print("Optimizer: ", opt_name[args.opt], " LR: ", str(args.lr))
+
         #create training model]
         fname = filepath  + "-model-" + str(args.net)
         exists = os.path.exists(fname)
@@ -973,7 +983,6 @@ class NNet():
                 print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
             else:
-                print("Setting learning rate: " + str(args.lr))
                 mdx.optimizer.lr.assign(args.lr)
 
         self.model = mdx
@@ -1087,7 +1096,7 @@ def main():
     parser.add_argument('--rsav',dest='rsav', required=False, type=int, default=16, help='Save graph every RSAV steps.')
     parser.add_argument('--rsavo',dest='rsavo', required=False, type=int, default=128, help='Save optimization state every RSAVO steps.')
     parser.add_argument('--rand',dest='rand', required=False, action='store_true', help='Generate random network.')
-    parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam.')
+    parser.add_argument('--opt',dest='opt', required=False, type=int, default=0, help='Optimizer 0=SGD 1=Adam 2=Rectified Adam 3=Ranger.')
     parser.add_argument('--policy-channels',dest='pol_channels', required=False, type=int, default=POLICY_CHANNELS, help='Number of policy channels')
     parser.add_argument('--policy-weight',dest='pol_w', required=False, type=float, default=1.0, help='Policy loss weight.')
     parser.add_argument('--value-weight',dest='val_w', required=False, type=float, default=1.0, help='Value loss weight.')

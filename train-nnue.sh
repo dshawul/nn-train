@@ -6,7 +6,7 @@ NET=5
 HEAD_TYPE=3
 BATCH_SIZE=8192
 CHANNELS=12
-NETS_DIR=nets-k41
+NETS_DIR=nets-k45
 MAX_STEPS=12800
 SAVE_STEPS=32
 
@@ -30,9 +30,9 @@ conv() {
 
 ID=0
 START=0
-EPOCHS=300
-FACT=0.9778
-LR_INIT=0.02
+EPOCHS=100
+FACT=0.983
+LR_INIT=0.001
 GSTEPS=$((START*MAX_STEPS))
 
 #training loop
@@ -42,23 +42,17 @@ for (( EP=$START; EP<$EPOCHS; EP++ )); do
     #continue
 
     #training data file
-    DATA_DIR=/home/daniel/storage/nnue-data/scorpio
-    DATA=$DATA_DIR/temp${EP}.epd.scorpio.gz
+    DATA_DIR=/home/daniel/storage/nnue-data/stock
+    TAG=$( printf %02d $EP )
+    DATA=$DATA_DIR/temp.epd.$TAG.gz
 
     echo "Data file:" $DATA
 
     #train
-    time python src/train.py --no-auxinp --gpus 1 --cores 12 --rsav $SAVE_STEPS --rsavo $MAX_STEPS --frac-z 0 \
+    time python src/train.py --opt 3 --no-auxinp --gpus 1 --cores 12 --rsav $SAVE_STEPS --rsavo $MAX_STEPS --frac-z 0 \
                         --id $ID --max-steps $MAX_STEPS --global-steps $GSTEPS --dir $NETS_DIR --gzip --epd ${DATA} \
                         --head-type $HEAD_TYPE --channels $CHANNELS --net $NET \
                         --learning-rate $LR --batch-size $BATCH_SIZE
     
     conv $NET $EP 
-
-    #shuffle dataset
-    if [ $(((EP + 1) % 16 )) -eq 0 ]; then
-        cd $DATA_DIR
-        time ./shuf.sh
-        cd -
-    fi
 done

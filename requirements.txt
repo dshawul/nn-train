@@ -3,6 +3,7 @@ joblib==0.11
 numpy==1.19.5
 chess==1.6.1
 tensorflow==2.6.3
+tensorflow_addons==0.15.0
 keras==2.6.0
 matplotlib==3.5.0
 uff==0.6.9
