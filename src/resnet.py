@@ -23,7 +23,7 @@ RENORM_DMAX = 0.0
 RENORM_MOM  = 0.99
 USE_SE = True
 USE_PRE_ACTIVATION = False
-L2_REG = l2(1.e-4)
+L2_REG = l2(5.e-5)
 K_INIT = "glorot_normal"
 
 def dense(x, n, name, act='relu'):

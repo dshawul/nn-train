@@ -979,7 +979,7 @@ class NNet():
         else:
             comp = ((nid * args.rsav) % args.rsavo == 0)
             mdx = self.load_model(fname,comp,args)
-            if not mdx.optimizer:
+            if (not mdx.optimizer) or args.recompile:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
             else:
@@ -999,7 +999,7 @@ class NNet():
         )
 
         #tensorboard callback
-        log_dir = "logs/fit/model-" + str(args.net)
+        log_dir = "logs/" + os.path.basename(args.dir)
         self.tensorboard = tf.keras.callbacks.TensorBoard(
             log_dir=log_dir,
             update_freq=args.rsav
@@ -1115,6 +1115,7 @@ def main():
         help='Heads of neural network, 0=value/policy, 1=value/score, 2=all three, 3=value only.')
     parser.add_argument('--max-steps',dest='max_steps', required=False, type=int, default=1000000, \
         help='Maximum number of steps to train for.')
+    parser.add_argument('--recompile','-r', dest='recompile', required=False, action='store_true', help='Recompile model')
 
     args = parser.parse_args()
 

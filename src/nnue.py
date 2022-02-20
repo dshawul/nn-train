@@ -10,7 +10,7 @@ from tensorflow.keras import activations, layers
 from tensorflow.keras.regularizers import l2
 import tensorflow as tf
 
-L2_REG = l2(1.e-4)
+L2_REG = l2(0.1e-5)
 K_INIT = "glorot_normal"
 
 def clipped_relu(x):
@@ -34,8 +34,7 @@ class DenseLayerForSparse(layers.Layer):
         self.bias = self.add_weight(
             "bias",
             shape=[self.num_units],
-            regularizer = L2_REG,
-            initializer = K_INIT)
+            initializer = "zeros")
         super(DenseLayerForSparse, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
