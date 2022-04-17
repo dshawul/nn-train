@@ -5,6 +5,7 @@ import struct
 import numpy as np
 import matplotlib.pyplot as plt
 from train import my_load_model, NNUE_KINDICES, NNUE_CHANNELS, NNUE_FEATURES, NNUE_FACTORIZER, NNUE_FACTORIZER_EXTRA
+from nnue import FT_WIDTH
 
 #import tensorflow and set logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -91,10 +92,10 @@ def save_weights(m,name):
                 wm = wi
                 has_plot = False
                 #add factorizer weights
-                if wi.shape == (NNUE_FEATURES, 256) and NNUE_KINDICES > 1:
-                    win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, 256),1,0)
-                    wm = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
-                    wms = np.zeros(shape=(NNUE_KINDICES*12*64, 256), dtype=np.float32)
+                if wi.shape == (NNUE_FEATURES, FT_WIDTH) and NNUE_KINDICES > 1:
+                    win = np.moveaxis(wi.reshape(64, NNUE_CHANNELS, FT_WIDTH),1,0)
+                    wm = np.zeros(shape=(NNUE_KINDICES*12*64, FT_WIDTH), dtype=np.float32)
+                    wms = np.zeros(shape=(NNUE_KINDICES*12*64, FT_WIDTH), dtype=np.float32)
                     print(str(wm.shape) + " after resize")
 
                     plt.figure(figsize=(40, 10))

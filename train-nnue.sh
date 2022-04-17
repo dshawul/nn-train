@@ -42,7 +42,7 @@ for (( EP=$START; EP<$EPOCHS; EP++ )); do
     #continue
 
     #training data file
-    DATA_DIR=/home/daniel/storage/nnue-data
+    DATA_DIR=/home/daniel/storage/nnue-data/all_data
     TAG=$( printf %03d $EP )
     DATA=$DATA_DIR/temp.epd.$TAG.gz
 

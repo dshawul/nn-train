@@ -10,6 +10,7 @@ from tensorflow.keras import activations, layers
 from tensorflow.keras.regularizers import l2
 import tensorflow as tf
 
+FT_WIDTH = 256
 L2_REG = l2(0.1e-5)
 K_INIT = "glorot_normal"
 
@@ -63,7 +64,7 @@ def input_head(main_input_shape):
     main_input = Input(shape=main_input_shape,sparse=True)
     x = main_input
 
-    x = DenseLayerForSparse(256, main_input_shape[0], name="sparse_input_dense")(x)
+    x = DenseLayerForSparse(FT_WIDTH, main_input_shape[0], name="sparse_input_dense")(x)
 
     model = Model(inputs=[main_input], outputs=[x])
 
