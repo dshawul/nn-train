@@ -1,11 +1,6 @@
 from __future__ import print_function
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (
-    Input,
-    Dense,
-    Flatten,
-    Concatenate
-)
+from tensorflow.keras.layers import Input, Dense, Flatten, Concatenate
 from tensorflow.keras import activations, layers
 from tensorflow.keras.regularizers import l2
 import tensorflow as tf
@@ -14,12 +9,16 @@ FT_WIDTH = 256
 L2_REG = l2(0.1e-5)
 K_INIT = "glorot_normal"
 
+
 def clipped_relu(x):
 
     return activations.relu(x, max_value=1.0)
 
+
 class DenseLayerForSparse(layers.Layer):
-    def __init__(self, num_units, input_size, activation=clipped_relu, name=None,**kwargs):
+    def __init__(
+        self, num_units, input_size, activation=clipped_relu, name=None, **kwargs
+    ):
         super(DenseLayerForSparse, self).__init__(name=name)
         self.num_units = num_units
         self.input_size = input_size
@@ -29,13 +28,10 @@ class DenseLayerForSparse(layers.Layer):
         self.kernel = self.add_weight(
             "kernel",
             shape=[self.input_size, self.num_units],
-            regularizer = L2_REG,
-            initializer = K_INIT
+            regularizer=L2_REG,
+            initializer=K_INIT,
         )
-        self.bias = self.add_weight(
-            "bias",
-            shape=[self.num_units],
-            initializer = "zeros")
+        self.bias = self.add_weight("bias", shape=[self.num_units], initializer="zeros")
         super(DenseLayerForSparse, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
@@ -44,24 +40,31 @@ class DenseLayerForSparse(layers.Layer):
 
     def get_config(self):
         config = super(DenseLayerForSparse, self).get_config()
-        config.update({
-            "input_size": self.input_size,
-            "num_units": self.num_units,
-        })
+        config.update(
+            {
+                "input_size": self.input_size,
+                "num_units": self.num_units,
+            }
+        )
         return config
+
 
 def dense(x, n, name, act=clipped_relu):
 
-    x = Dense(n, activation=act,
-              kernel_regularizer=L2_REG,
-              kernel_initializer=K_INIT,
-              name=name)(x)
+    x = Dense(
+        n,
+        activation=act,
+        kernel_regularizer=L2_REG,
+        kernel_initializer=K_INIT,
+        name=name,
+    )(x)
 
     return x
 
+
 def input_head(main_input_shape):
 
-    main_input = Input(shape=main_input_shape,sparse=True)
+    main_input = Input(shape=main_input_shape, sparse=True)
     x = main_input
 
     x = DenseLayerForSparse(FT_WIDTH, main_input_shape[0], name="sparse_input_dense")(x)
@@ -70,28 +73,30 @@ def input_head(main_input_shape):
 
     return model
 
+
 def value_head(x):
 
-    x = dense(x,  32, "value_dense_2")
-    x = dense(x,  32, "value_dense_3")
-    value = dense(x, 1, "value", act='sigmoid')
+    x = dense(x, 32, "value_dense_2")
+    x = dense(x, 32, "value_dense_3")
+    value = dense(x, 1, "value", act="sigmoid")
 
     return value
+
 
 def build_net(main_input_shape):
 
     input_model = input_head(main_input_shape)
 
-    player_input = Input(shape=main_input_shape,sparse=True,name='player_input')
-    opponent_input = Input(shape=main_input_shape,sparse=True,name='opponent_input')
+    player_input = Input(shape=main_input_shape, sparse=True, name="player_input")
+    opponent_input = Input(shape=main_input_shape, sparse=True, name="opponent_input")
     hp = input_model(player_input)
     ho = input_model(opponent_input)
     x = Concatenate()([hp, ho])
 
-    #value
+    # value
     value = value_head(x)
 
-    #model
-    model = Model(inputs=[player_input,opponent_input], outputs=[value])
+    # model
+    model = Model(inputs=[player_input, opponent_input], outputs=[value])
 
     return model
