@@ -1066,7 +1066,7 @@ class NNet:
             mdx = self.new_model(args)
             self.compile_model(mdx, args)
         else:
-            comp = (nid * args.rsav) % args.rsavo == 0
+            comp = (args.rsavo and ((nid * args.rsav) % args.rsavo == 0))
             mdx = self.load_model(fname, comp, args)
             if (not mdx.optimizer) or args.recompile:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
@@ -1149,9 +1149,9 @@ def train_epd(myNet, args, myEpd, nid, start=1):
         steps = steps + 1
 
         nid = steps // args.rsav
-        if steps % args.rsavo == 0:
+        if args.rsavo and (steps % args.rsavo == 0):
             myNet.save_checkpoint(nid, args, True)
-        elif steps % args.rsav == 0:
+        elif args.rsav and (steps % args.rsav == 0):
             myNet.save_checkpoint(nid, args, False)
 
         if steps >= args.max_steps:
@@ -1161,6 +1161,12 @@ def train_epd(myNet, args, myEpd, nid, start=1):
         if p1.is_alive():
             x, y = queue.get()
         else:
+            #run out of data before reaching max steps
+            nid = nid + 1
+            if args.rsavo:
+                myNet.save_checkpoint(nid, args, True)
+            elif args.rsav:
+                myNet.save_checkpoint(nid, args, False)
             break
 
     p1.terminate()
