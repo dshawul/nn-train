@@ -902,7 +902,7 @@ def build_model(cid):
     elif cid == 3:
         return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 24, 320, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 20, 384, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 5:
         INPUT_SHAPE = (NNUE_FEATURES,)
         return nnue.build_net(INPUT_SHAPE)

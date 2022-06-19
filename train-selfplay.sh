@@ -137,7 +137,7 @@ time_command() {
 display_help() {
     echo "Usage: $0 [Option...] {IDs} " >&2
     echo
-    echo "   ID            Network ID to train 0..4 for 2x32,6x64,12x128,20x256,40x356."
+    echo "   ID            Network ID to train 0..4 for 2x32,6x64,12x128,20x256,20x384."
     echo "   -h,--help     Display this help message."
     echo "   -m,--match    Conduct matches for evaluating networks. e.g. --match 0 200 201"
     echo "                 match 2x32 nets ID 200 and 201"
