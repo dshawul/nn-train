@@ -980,25 +980,25 @@ class NNet:
 
         # losses and metrics
         if HEAD_TYPE == 0:
-            losses = {"value": "categorical_crossentropy", "policya": loss}
-            metrics = {"value": "accuracy", "policya": paccuracy}
+            losses = {"valuea": "categorical_crossentropy", "policya": loss}
+            metrics = {"valuea": "accuracy", "policya": paccuracy}
             loss_weights = [args.val_w, args.pol_w]
 
         elif HEAD_TYPE == 1:
-            losses = {"value": "categorical_crossentropy", "scorea": sloss}
-            metrics = {"value": "accuracy"}
+            losses = {"valuea": "categorical_crossentropy", "scorea": sloss}
+            metrics = {"valuea": "accuracy"}
             loss_weights = [args.val_w, args.score_w]
 
         elif HEAD_TYPE == 2:
             losses = {
-                "value": "categorical_crossentropy",
+                "valuea": "categorical_crossentropy",
                 "policya": loss,
                 "scorea": sloss,
             }
-            metrics = {"value": "accuracy", "policya": paccuracy}
+            metrics = {"valuea": "accuracy", "policya": paccuracy}
             loss_weights = [args.val_w, args.pol_w, args.score_w]
         else:
-            losses = {"value": "mean_squared_error"}
+            losses = {"valuea": "mean_squared_error"}
             metrics = {}
             loss_weights = [args.val_w]
 
@@ -1445,12 +1445,14 @@ def main():
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
 
+    # set JIT compilation of graphs
+    tf.config.optimizer.set_jit(True)
+
     # init net class
     myNet = NNet(args)
     myNet.save_infer_graph(args)
 
-    # set JIT compilation of graphs
-    tf.config.optimizer.set_jit(True)
+    # set global mixed precision policy
     if args.mixed:
         tf.keras.mixed_precision.set_global_policy("mixed_float16")
 

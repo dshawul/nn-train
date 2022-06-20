@@ -196,7 +196,8 @@ def value_head(x):
     x = Flatten(name="value_flatten")(vx)
     x = dense(x, 128, "value_dense_1")
     x = dense(x, 32, "value_dense_3")
-    value = dense(x, 3, "value", act="softmax")
+    x = dense(x, 3, "value", act=None)
+    value = Activation("softmax", name="valuea", dtype="float32")(x)
 
     return value
 
@@ -208,7 +209,7 @@ def policy_head(x, filters, pol_channels):
 
     # policy head
     x = Reshape((-1,), name="policy")(px)
-    policy = Activation("softmax", name="policya")(x)
+    policy = Activation("softmax", name="policya", dtype="float32")(x)
 
     return policy
 
@@ -220,7 +221,7 @@ def score_head(x, filters, pol_channels):
 
     # score head
     x = Reshape((-1,), name="score")(px)
-    score = Activation("sigmoid", name="scorea")(x)
+    score = Activation("sigmoid", name="scorea", dtype="float32")(x)
 
     return score
 

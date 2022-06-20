@@ -6,7 +6,7 @@ from tensorflow.keras.regularizers import l2
 import tensorflow as tf
 
 FT_WIDTH = 256
-L2_REG = l2(0.1e-5)
+L2_REG = l2(0.2e-5)
 K_INIT = "glorot_normal"
 
 
@@ -78,7 +78,8 @@ def value_head(x):
 
     x = dense(x, 32, "value_dense_2")
     x = dense(x, 32, "value_dense_3")
-    value = dense(x, 1, "value", act="sigmoid")
+    x = dense(x, 1, "value", act=None)
+    value = Activation("sigmoid", name="valuea", dtype="float32")(x)
 
     return value
 
