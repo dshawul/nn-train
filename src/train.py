@@ -978,11 +978,6 @@ class NNet:
             radam = tfa.optimizers.RectifiedAdam(learning_rate=args.lr)
             opt = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
 
-        if args.mixed:
-            opt = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(
-                opt
-            )
-
         # losses and metrics
         if HEAD_TYPE == 0:
             losses = {"value": "categorical_crossentropy", "policya": loss}
@@ -1066,7 +1061,7 @@ class NNet:
             mdx = self.new_model(args)
             self.compile_model(mdx, args)
         else:
-            comp = (args.rsavo and ((nid * args.rsav) % args.rsavo == 0))
+            comp = args.rsavo and ((nid * args.rsav) % args.rsavo == 0)
             mdx = self.load_model(fname, comp, args)
             if (not mdx.optimizer) or args.recompile:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
@@ -1161,7 +1156,7 @@ def train_epd(myNet, args, myEpd, nid, start=1):
         if p1.is_alive():
             x, y = queue.get()
         else:
-            #run out of data before reaching max steps
+            # run out of data before reaching max steps
             nid = nid + 1
             if args.rsavo:
                 myNet.save_checkpoint(nid, args, True)
@@ -1429,21 +1424,7 @@ def main():
 
     args = parser.parse_args()
 
-    tf.keras.backend.set_learning_phase(1)
-
-    # memory growth of gpus
-    if args.gpus:
-        gpus = tf.config.experimental.list_physical_devices("GPU")
-        print("Num GPUs:", len(gpus))
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-
-    # set JIT compilation of graphs
-    tf.config.optimizer.set_jit(True)
-
-    # init net
-    myNet = NNet(args)
-
+    # convenience params
     BATCH_SIZE = args.batch_size
     CHANNELS = args.channels
     BOARDX = args.boardx
@@ -1457,13 +1438,25 @@ def main():
     PIECE_MAP = args.pcmap
     HEAD_TYPE = args.head_type
 
-    nid = args.id
+    # memory growth of gpus
+    if args.gpus:
+        gpus = tf.config.experimental.list_physical_devices("GPU")
+        print("Num GPUs:", len(gpus))
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
 
-    # save inference graphs
+    # init net class
+    myNet = NNet(args)
     myNet.save_infer_graph(args)
+
+    # set JIT compilation of graphs
+    tf.config.optimizer.set_jit(True)
+    if args.mixed:
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
     # load networks
     print("Loading network: " + str(args.net))
+    nid = args.id
     exists = myNet.load_checkpoint(nid, args)
 
     if args.rand:
