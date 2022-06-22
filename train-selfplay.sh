@@ -410,18 +410,34 @@ fi
 # get training epd positions
 get_src_epd() {
     rm -rf ctrain.epd
+    MAXN=$((NGAMES * 80))
+    tnpos=0
     while true; do
-        EPD=${data_stream[${CI}]}
-        echo "CI =" $CI $EPD
-        cp ${EPD} ${NETS_DIR}/current.epd.gz
-        gzip -fd ${NETS_DIR}/current.epd.gz
-        cat ${NETS_DIR}/current.epd >>ctrain.epd
-        rm -rf ${NETS_DIR}/current.epd
+        if [ ! -f ${NETS_DIR}/current.epd ]; then
+            EPD=${data_stream[${CI}]}
+            echo "CI =" $CI $EPD
+            cp ${EPD} ${NETS_DIR}/current.epd.gz
+            gzip -fd ${NETS_DIR}/current.epd.gz
+        else
+            CI=$((CI - 1))
+        fi
+
+        cnpos=$(wc -l ${NETS_DIR}/current.epd | awk '{print $1}')
+        if [ $((tnpos + cnpos)) -lt $MAXN ]; then
+            cat ${NETS_DIR}/current.epd >>ctrain.epd
+            tnpos=$((tnpos + cnpos))
+            rm -rf ${NETS_DIR}/current.epd
+        else
+            rem=$((MAXN - tnpos))
+            head -n $rem ${NETS_DIR}/current.epd >>ctrain.epd
+            tnpos=$MAXN
+            tail -n $((cnpos - rem)) ${NETS_DIR}/current.epd >_temp_
+            mv _temp_ ${NETS_DIR}/current.epd
+        fi
+        echo $tnpos of $MAXN
         CI=$((CI + 1))
 
-        NPOS=$(wc -l ctrain.epd | awk '{print $1}')
-        MAXN=$((NGAMES * 80))
-        if [ $NPOS -ge $MAXN ]; then
+        if [ $tnpos -ge $MAXN ]; then
             break
         fi
     done
