@@ -45,7 +45,8 @@ MONTECARLO=1          # Use montecarlo search for selfplay
 SV=800                # simulations limit for MCTS
 SD=4                  # depth limit for AB search
 OPT=0                 # Optimizer 0=SGD 1=ADAM
-LR=0.2                # learning rate
+LR_INIT=0.2           # learning rate
+LR_FACT=1.0           # factor for decreasing LR every NGAMES
 NGAMES=24576          # train net after this number of games
 BATCH_SIZE=1024       # Mini-batch size
 NSTEPS=1280           # Number of steps to train for
@@ -92,10 +93,12 @@ TRNFLGS="--mixed"
 # server refresh rate
 REFRESH=20s
 
-# Adjust Z and PI ratio for distillation
-if [ $DISTILL != 0 ]; then
-    FRAC_Z=0
-    FRAC_PI=1
+####################
+# override settings
+####################
+
+if [ -f $PWD/config.sh ]; then
+    source $PWD/config.sh
 fi
 
 ##############
@@ -134,6 +137,7 @@ time_command() {
 ##############
 # display help
 ##############
+
 display_help() {
     echo "Usage: $0 [Option...] {IDs} " >&2
     echo
@@ -153,6 +157,7 @@ fi
 ############################
 # calcuate elos of matches
 ############################
+
 calculate_elo() {
     cat ${NETS_DIR}/matches/*.pgn >games.pgn
     (
@@ -179,6 +184,7 @@ fi
 ###################
 # conduct matches
 ###################
+
 conduct_match() {
     ND1=${NETS_DIR}/hist/ID-$3-model-$1
     ND2=${NETS_DIR}/hist/ID-$2-model-$1
@@ -423,7 +429,7 @@ get_src_epd() {
         fi
 
         cnpos=$(wc -l ${NETS_DIR}/current.epd | awk '{print $1}')
-        if [ $((tnpos + cnpos)) -lt $MAXN ]; then
+        if [ $((tnpos + cnpos)) -le $MAXN ]; then
             cat ${NETS_DIR}/current.epd >>ctrain.epd
             tnpos=$((tnpos + cnpos))
             rm -rf ${NETS_DIR}/current.epd
@@ -536,7 +542,9 @@ conv() {
     for i in $(seq 1 $E); do
         rm -rf ${NETS_DIR}/ID-$i-model-$1
     done
-    ./scripts/prepare.sh ${NETS_DIR} 0 $1 >/dev/null 2>&1
+    if [ $TRAIN_MODE -ne 2 ]; then
+        ./scripts/prepare.sh ${NETS_DIR} 0 $1 >/dev/null 2>&1
+    fi
 }
 
 # backup data
@@ -549,6 +557,10 @@ backup_data() {
 
 # train network
 train() {
+    # compute LR
+    LR=`awk "BEGIN { print $LR_INIT*($LR_FACT^$V) }"`
+
+    # call trainer
     python -W ignore src/train.py ${TRNFLGS} \
         --dir ${NETS_DIR} --epd ${NETS_DIR}/temp.epd --net $NID --gpus ${GPUS} --cores $((CPUS / 2)) \
         --rsav ${SAVE_STEPS} --rsavo ${SAVE_STEPS_O} --opt ${OPT} --max-steps ${NSTEPS} --learning-rate ${LR} \

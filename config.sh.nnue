@@ -1,0 +1,16 @@
+#!/bin/bash
+
+TRAIN_MODE=2
+NETS_DIR=nets-k46
+SRC_DATA_DIR=$HOME/storage/nnue-data/all_data
+NGAMES=1600000 # approx 128 mil posiitons (1 epoch)
+
+LR_FACTOR=0.99
+HEAD_TYPE=3
+BATCH_SIZE=8192
+CHANNELS=12
+MAX_STEPS=12800
+SAVE_STEPS=32
+SAVE_STEPS_O=$MAX_STEPS
+TRAIN_FLAGS="--no-auxinp"
+FRAC_Z=0

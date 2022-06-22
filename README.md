@@ -87,7 +87,7 @@ You can build your own network (different number of blocks and filters) by modif
 
 To train networks by reinforcement learning issue command
    
-    ./train-selfplay.sh 3
+    ./train.sh 3
 
 This will train networks 20x256 resnet using selfplay games produced
 by the 20x256 network. The net used for producing selfplay games is mentioned first
