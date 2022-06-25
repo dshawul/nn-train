@@ -15,7 +15,7 @@
 #define NNUE    4
 #define NONET  -1
 
-#if 1
+#if 0
 #define NN_TYPE                NNUE
 #define USE_SPARSE             1
 #else
@@ -837,7 +837,7 @@ DLLExport void _CDECL generate_input(const char* sdata,
         ) {
 
     EPD epdf;
-    char epds[4 * MAX_FILE_STR];
+    char epds[8 * MAX_FILE_STR];
 
     epdf.open(sdata);
 
@@ -884,28 +884,25 @@ DLLExport void _CDECL generate_input_nnue(const char* sdata,
    test
  */
 #ifdef TEST
-int main() {
+int main(int argc, char* argv[]) {
+
 #ifdef MYDEBUG
     static const int N = 1;
 #else
-    static const int N = 131072;
+    static const int N = 1024;
 #endif
 
+    //---make sure filename is passed
+    if(argc < 2) {
+      printf("Usage: %s file_name.gz\n", argv[0]);
+      exit(0);
+    }
+ 
     //---read chunk-----
-    std::ifstream ifs("temp0.epd");
+    std::ifstream ifs(argv[1]);
     std::string all_lines;
     std::string line;
-    int cnt = 0;
-    while(std::getline(ifs, line)) {
-        all_lines += line + "\n";
-        cnt++;
-        if(cnt >= N) break;
-    }
 
-    float frac_z = 0;
-    float frac_pi = 1;
-
-    //---generate input planes
 #if NN_TYPE == NNUE
     int* indices0 = new int[N * 192 * 2];
     int* indices1 = new int[N * 192 * 2];
@@ -913,23 +910,44 @@ int main() {
     int8_t* values1 = new int8_t[N * 192];
     float* oval = new float[N];
     int cidx0, cidx1;
-
-    generate_input_nnue(all_lines.c_str(),
-            indices0, values0,
-            indices1, values1,
-            oval,
-            &cidx0, &cidx1,
-            frac_z);
 #else
     float* iplanes = new float[N * 64 * CHANNELS];
     float* opol = new float[N * 64 * POLICY_CHANNELS];
     float* oval = new float[N * 3];
-
-    generate_input(all_lines.c_str(),
-        iplanes, opol,
-        oval,
-        frac_z, frac_pi);
 #endif
+
+    int batch = 1;
+    while(true) {
+        
+        all_lines="";
+        int cnt = 0;
+        while(std::getline(ifs, line)) {
+            all_lines += line + "\n";
+            cnt++;
+            if(cnt >= N) break;
+        }
+        if(cnt < N) break;
+
+        float frac_z = 0;
+        float frac_pi = 1;
+
+        //---generate input planes
+        printf("Batch %d\r",batch);
+#if NN_TYPE == NNUE
+        generate_input_nnue(all_lines.c_str(),
+                indices0, values0,
+                indices1, values1,
+                oval,
+                &cidx0, &cidx1,
+                frac_z);
+#else
+        generate_input(all_lines.c_str(),
+            iplanes, opol,
+            oval,
+            frac_z, frac_pi);
+#endif
+        batch++;
+    }
 
     return 0;
 }
