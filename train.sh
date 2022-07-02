@@ -261,11 +261,16 @@ init0() {
 # initialize random network
 init() {
     python -W ignore src/train.py ${TRNFLGS} --rand \
-        --dir ${NETS_DIR} --net $1 --batch-size ${BATCH_SIZE} \
-        --channels ${CHANNELS} --policy-channels ${POL_CHANNELS} \
-        --boardx ${BOARDX} --boardy ${BOARDY} --head-type ${HEAD_TYPE}
+        --dir ${NETS_DIR} --net $1 --gpus ${GPUS} --cores $((CPUS / 2)) \
+        --opt ${OPT} --learning-rate ${LR_INIT} \
+        --policy-weight ${POL_WEIGHT} --value-weight ${VAL_WEIGHT} --score-weight ${SCO_WEIGHT} \
+        --policy-gradient ${POL_GRAD} --channels ${CHANNELS} --batch-size ${BATCH_SIZE} \
+        --boardx ${BOARDX} --boardy ${BOARDY} --policy-channels ${POL_CHANNELS} \
+        --head-type ${HEAD_TYPE}
 
-    ./scripts/prepare.sh ${NETS_DIR} 0 $1 >/dev/null 2>&1
+    if [ $TRAIN_MODE -ne 2 ]; then
+        ./scripts/prepare.sh ${NETS_DIR} 0 $1 >/dev/null 2>&1
+    fi
     cp ${NETS_DIR}/ID-0-model-$1 ${NETS_DIR}/hist/ID-0-model-$1
     ln -sf ${NETS_DIR}/infer-$1 ${NETS_DIR}/hist/infer-$1
 }
@@ -344,7 +349,7 @@ if [ $TRAIN_MODE -eq 1 ]; then
     send_server network-uff ${NDIR} \
         "http://scorpiozero.ddns.net/scorpiozero/nets-${WORK_ID}/ID-0-model-${NID}.${NEXT}"
     echo "Finished starting server"
-else
+elif [ $TRAIN_MODE -ne 2 ]; then
     if [ ! -f ${SC}/${EXE} ]; then
         echo "Please set the correct path to " ${EXE}
         exit 0

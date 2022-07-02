@@ -1063,10 +1063,11 @@ class NNet:
         else:
             comp = args.rsavo and ((nid * args.rsav) % args.rsavo == 0)
             mdx = self.load_model(fname, comp, args)
-            if (not mdx.optimizer) or args.recompile:
+            if (not mdx.optimizer) or args.recompile_optimizer:
                 print("====== ", fname, " : starting from fresh optimizer state ======")
                 self.compile_model(mdx, args)
             else:
+                # change learning rate without recompiling optimizer
                 mdx.optimizer.lr.assign(args.lr)
 
         self.model = mdx
@@ -1414,12 +1415,12 @@ def main():
         help="Maximum number of steps to train for.",
     )
     parser.add_argument(
-        "--recompile",
+        "--recompile-optimizer",
         "-r",
-        dest="recompile",
+        dest="recompile_optimizer",
         required=False,
         action="store_true",
-        help="Recompile model",
+        help="Recompile optimizer",
     )
 
     args = parser.parse_args()
