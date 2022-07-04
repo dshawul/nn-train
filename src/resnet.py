@@ -15,16 +15,25 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.backend import learning_phase
 
+from transformer import Encoder
+
 CHANNEL_AXIS = 3
+L2_REG = l2(5.0e-5)
+K_INIT = "glorot_normal"
+
 V_BATCH_SIZE = None
 RENORM = False
 RENORM_RMAX = 1.0
 RENORM_DMAX = 0.0
 RENORM_MOM = 0.99
+
 USE_SE = True
-USE_PRE_ACTIVATION = False
-L2_REG = l2(5.0e-5)
-K_INIT = "glorot_normal"
+
+# Specify body type
+#   0 = post-activation
+#   1 = pre-activation
+#   2 = transformer
+BODY_TYPE = 0
 
 
 def dense(x, n, name, act="relu"):
@@ -226,19 +235,26 @@ def score_head(x, filters, pol_channels):
     return score
 
 
-def build_net(main_input_shape, blocks, filters, pol_channels, HEAD_TYPE):
+def build_net(main_input_shape, blocks, filters, num_heads, pol_channels, HEAD_TYPE):
 
     main_input = Input(shape=main_input_shape, name="main_input")
     x = main_input
 
-    # input convolution block
-    x = conv_bn_relu(x, filters, 3, True, "input")
-
-    # residual tower
-    if USE_PRE_ACTIVATION:
-        x = build_pre_net(x, blocks, filters)
+    # residual/transformer tower
+    if BODY_TYPE == 2:
+        training = learning_phase() == 1
+        x = Encoder(
+            num_layers=blocks,
+            d_model=filters,
+            num_heads=num_heads,
+            dff=4*filters
+        )(x, training=training)
     else:
-        x = build_post_net(x, blocks, filters)
+        x = conv_bn_relu(x, filters, 3, True, "input")
+        if BODY_TYPE == 0:
+            x = build_post_net(x, blocks, filters)
+        elif BODY_TYPE == 1:
+            x = build_pre_net(x, blocks, filters)
 
     # value
     value = value_head(x)

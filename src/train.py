@@ -4,6 +4,7 @@ import time
 import chess
 import resnet
 import nnue
+import transformer
 import argparse
 import gzip
 import numpy as np
@@ -894,15 +895,15 @@ def get_batch(myNet, args, start):
 def build_model(cid):
     INPUT_SHAPE = (None, None, CHANNELS)
     if cid == 0:
-        return resnet.build_net(INPUT_SHAPE, 2, 32, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 2, 32, 2, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 1:
-        return resnet.build_net(INPUT_SHAPE, 6, 64, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 6, 64, 2, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 2:
-        return resnet.build_net(INPUT_SHAPE, 12, 128, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 12, 128, 2, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 3:
-        return resnet.build_net(INPUT_SHAPE, 20, 256, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 20, 256, 2, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 4:
-        return resnet.build_net(INPUT_SHAPE, 20, 384, POLICY_CHANNELS, HEAD_TYPE)
+        return resnet.build_net(INPUT_SHAPE, 20, 384, 2, POLICY_CHANNELS, HEAD_TYPE)
     elif cid == 5:
         INPUT_SHAPE = (NNUE_FEATURES,)
         return nnue.build_net(INPUT_SHAPE)
@@ -943,6 +944,7 @@ def my_load_model(fname, compile=True):
             "sloss": sloss,
             "clipped_relu": nnue.clipped_relu,
             "DenseLayerForSparse": nnue.DenseLayerForSparse,
+            "Encoder": transformer.Encoder,
         },
     )
 
@@ -1057,7 +1059,7 @@ class NNet:
         # create training model]
         fname = filepath + "-model-" + str(args.net)
         exists = os.path.exists(fname)
-        if not os.path.exists(fname):
+        if not exists:
             mdx = self.new_model(args)
             self.compile_model(mdx, args)
         else:
@@ -1464,6 +1466,7 @@ def main():
 
     if args.rand:
         myNet.save_checkpoint(nid, args, True)
+        print(myNet.model.summary())
     else:
         if not exists:
             myNet.save_checkpoint(nid, args, True)
