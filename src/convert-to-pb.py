@@ -282,14 +282,67 @@ def convertGraph(modelPath, inferPath, outdir, name):
 
     constant_graph = freeze_model(net_model)
 
-    # Save frozen graph from frozen ConcreteFunction to hard drive
+    # Save frozen graph from frozen ConcreteFunction
     tf.io.write_graph(
         graph_or_graph_def=constant_graph,
         logdir=outdir,
         name=name + ".pb",
         as_text=False,
     )
-    print("Frozen graph: ", os.path.join(outdir, name + ".pb"))
+    path_pb = os.path.join(outdir, name + ".pb")
+    print("Frozen protobuf graph: ", path_pb)
+
+    # output names
+    if "main_input" in net_model.input_names:
+        output_nodes = ["policy/Reshape", "value/BiasAdd"]
+        input_nodes = ["main_input"]
+    else:
+        output_nodes = ["valuea/Sigmoid"]
+        input_nodes = ["player_input", "opponent_input"]
+
+    # Save onnx model
+    try:
+        from tf2onnx import tf_loader
+        from tf2onnx.tfonnx import process_tf_graph
+        from tf2onnx.optimizer import optimize_graph
+        from tf2onnx import utils, constants
+        from tf2onnx.handler import tf_op
+        extra_opset = [utils.make_opsetid(constants.CONTRIB_OPS_DOMAIN, 1)]
+        tensors_to_rename = { f"{e}:0":e for e in input_nodes }
+        tensors_to_rename.update({ f"{e}:0":e for e in output_nodes })
+        with tf.Graph().as_default() as tf_graph:
+            tf.import_graph_def(constant_graph, name='')
+        with tf_loader.tf_session(graph=tf_graph):
+            g = process_tf_graph(
+                    tf_graph,
+                    output_names=[f"{e}:0" for e in output_nodes],
+                    tensors_to_rename=tensors_to_rename,
+                    extra_opset=extra_opset
+                )
+        onnx_graph = optimize_graph(g)
+        model_proto = onnx_graph.make_model("converted")
+        path_onnx = os.path.join(outdir, name + ".onnx")
+        utils.save_protobuf(path_onnx, model_proto)
+        print("Fronzen ONNX graph: ", path_onnx)
+    except:
+        print("ONNX coverter failed")
+
+    # Save uff model
+    try:
+        import uff
+        path_uff = os.path.join(outdir, name + ".uff")
+        uff.from_tensorflow(
+            constant_graph,
+            output_nodes=output_nodes,
+            output_filename=path_uff,
+            write_preprocessed=False,
+            text=False,
+            debug_mode=False,
+            return_graph_info=False
+        )
+        print("Frozen UFF graph: ", path_uff)
+    except:
+        print("UFF coverter failed")
 
 
 if __name__ == "__main__":
