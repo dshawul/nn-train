@@ -7,3 +7,5 @@ tensorflow_addons==0.15.0
 keras==2.6.0
 matplotlib==3.5.0
 uff==0.6.9
+graphsurgeon==0.4.5
+tf2onnx==1.11.1
