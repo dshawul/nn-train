@@ -180,7 +180,7 @@ int decode_fen(const char* fen_str, int* player, int* castle,
         double pol;
         sscanf(p,"%d %lf%n",&idx,&pol,&pos);
         p += pos;
-        opol[idx] = pol;
+        opol[idx] += pol;
 #ifdef MYDEBUG
         printf("%d. %d %f\n",i+1,idx,opol[idx]);
 #endif
@@ -941,6 +941,10 @@ int main(int argc, char* argv[]) {
                 &cidx0, &cidx1,
                 frac_z);
 #else
+        memset(iplanes, 0, N * 64 * CHANNELS * sizeof(float));
+        memset(opol, 0, N * 64 * POLICY_CHANNELS * sizeof(float));
+        memset(oval, 0, N * 3 * sizeof(float));
+
         generate_input(all_lines.c_str(),
             iplanes, opol,
             oval,

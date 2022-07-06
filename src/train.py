@@ -642,16 +642,16 @@ def fill_examples(examples, spid):
 
             if HEAD_TYPE == 0:
                 for i in range(offset, offset + nmoves * 2, 2):
-                    opolicy[id, int(words[i])] = float(words[i + 1])
+                    opolicy[id, int(words[i])] += float(words[i + 1])
                 offset += nmoves * 2
             elif HEAD_TYPE == 1:
                 for i in range(offset, offset + nmoves * 2, 2):
-                    oscore[id, int(words[i])] = float(words[i + 1])
+                    oscore[id, int(words[i])] += float(words[i + 1])
                 offset += nmoves * 2
             else:
                 for i in range(offset, offset + nmoves * 3, 3):
-                    opolicy[id, int(words[i])] = float(words[i + 1])
-                    oscore[id, int(words[i])] = float(words[i + 2])
+                    opolicy[id, int(words[i])] += float(words[i + 1])
+                    oscore[id, int(words[i])] += float(words[i + 2])
                 offset += nmoves * 3
 
             if (FRAC_PI < 1) and (offset < len(words)):
