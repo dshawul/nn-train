@@ -1,5 +1,5 @@
 python_chess==0.23.11
-joblib==0.11
+joblib==1.2.0
 numpy==1.19.5
 chess==1.6.1
 tensorflow==2.6.3
